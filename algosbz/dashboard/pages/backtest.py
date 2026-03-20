@@ -12,11 +12,15 @@ from algosbz.dashboard.theme import section_title, kpi_row
 STRATEGY_MAP = {
     "Vol Mean Reversion": ("algosbz.strategy.volatility_mean_reversion", "VolatilityMeanReversion"),
     "Trend Pullback": ("algosbz.strategy.trend_pullback", "TrendPullback"),
+    "H4 Mean Reversion": ("algosbz.strategy.h4_mean_reversion", "H4MeanReversion"),
+    "Swing Breakout": ("algosbz.strategy.swing_breakout", "SwingBreakout"),
 }
 
 RECOMMENDED = {
     "Vol Mean Reversion": ["USDCHF"],
     "Trend Pullback": ["GBPJPY", "XTIUSD"],
+    "H4 Mean Reversion": ["XTIUSD"],
+    "Swing Breakout": ["XTIUSD", "USDJPY"],
 }
 
 

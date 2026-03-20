@@ -21,6 +21,8 @@ from algosbz.risk.prop_firm import PropFirmSimulator
 STRATEGIES = {
     "vol_mean_reversion": "algosbz.strategy.volatility_mean_reversion.VolatilityMeanReversion",
     "trend_pullback": "algosbz.strategy.trend_pullback.TrendPullback",
+    "h4_mean_reversion": "algosbz.strategy.h4_mean_reversion.H4MeanReversion",
+    "swing_breakout": "algosbz.strategy.swing_breakout.SwingBreakout",
 }
 
 

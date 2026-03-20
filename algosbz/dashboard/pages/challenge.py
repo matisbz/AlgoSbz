@@ -16,6 +16,8 @@ from algosbz.dashboard.theme import section_title, kpi_row, phase_badge, COLORS
 STRATEGY_MAP = {
     "Vol Mean Reversion": ("algosbz.strategy.volatility_mean_reversion", "VolatilityMeanReversion"),
     "Trend Pullback": ("algosbz.strategy.trend_pullback", "TrendPullback"),
+    "H4 Mean Reversion": ("algosbz.strategy.h4_mean_reversion", "H4MeanReversion"),
+    "Swing Breakout": ("algosbz.strategy.swing_breakout", "SwingBreakout"),
 }
 
 
@@ -94,8 +96,8 @@ def render():
         st.session_state["ch_result"] = result
         st.session_state["ch_phases"] = phases
         st.session_state["ch_nmc"] = n_mc
-        st.session_state["ch_fee"] = fee_per_attempt
-        st.session_state["ch_cool"] = cooldown
+        st.session_state["ch_fee_val"] = fee_per_attempt
+        st.session_state["ch_cool_val"] = cooldown
 
     # ── Results ────────────────────────────────────────────
     if "ch_result" not in st.session_state:
@@ -104,8 +106,8 @@ def render():
     result = st.session_state["ch_result"]
     phases = st.session_state["ch_phases"]
     n_mc = st.session_state["ch_nmc"]
-    fee = st.session_state.get("ch_fee", 500)
-    cooldown = st.session_state.get("ch_cool", 1)
+    fee = st.session_state.get("ch_fee_val", 500)
+    cooldown = st.session_state.get("ch_cool_val", 1)
 
     st.markdown("---")
 

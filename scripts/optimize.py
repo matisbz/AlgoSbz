@@ -22,6 +22,8 @@ from algosbz.optimization.objective import prop_firm_objective
 STRATEGIES = {
     "vol_mean_reversion": ("algosbz.strategy.volatility_mean_reversion", "VolatilityMeanReversion"),
     "trend_pullback": ("algosbz.strategy.trend_pullback", "TrendPullback"),
+    "h4_mean_reversion": ("algosbz.strategy.h4_mean_reversion", "H4MeanReversion"),
+    "swing_breakout": ("algosbz.strategy.swing_breakout", "SwingBreakout"),
 }
 
 # Parameter grids for each strategy
@@ -41,6 +43,22 @@ PARAM_GRIDS = {
         "pullback_zone_atr": [0.5, 0.8, 1.0, 1.5],
         "sl_atr_mult": [2.0, 2.5, 3.0],
         "tp_atr_mult": [3.0, 3.5, 4.5],
+    },
+    "h4_mean_reversion": {
+        "bb_period": [15, 20, 25],
+        "bb_std": [1.5, 2.0, 2.5],
+        "rsi_oversold": [25, 30],
+        "rsi_overbought": [70, 75],
+        "adx_max": [25, 30, 35],
+        "sl_atr_mult": [1.0, 1.5, 2.0],
+        "tp_atr_mult": [1.5, 2.0, 2.5],
+    },
+    "swing_breakout": {
+        "donchian_period": [15, 20, 25],
+        "squeeze_pct": [0.7, 0.8, 0.9],
+        "adx_min": [15, 20, 25],
+        "sl_atr_mult": [1.0, 1.5, 2.0],
+        "tp_atr_mult": [2.0, 2.5, 3.0],
     },
 }
 

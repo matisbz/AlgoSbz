@@ -265,7 +265,9 @@ class PropFirmSimulator:
                 if current_phase_idx >= len(self.phases):
                     funded = True
                     funded_date = attempt.end_date
-            # On FAIL: current_phase_idx stays the same → retry
+            else:
+                # FAIL at any phase → back to Phase 1 (buy new exam)
+                current_phase_idx = 0
 
         total_calendar_days = None
         if funded and first_start_date and funded_date:
@@ -372,21 +374,26 @@ class PropFirmSimulator:
                 target_reached = True
                 target_reached_date = bar_date
 
-        # If we exited the loop without DD breach
-        if outcome == "INCOMPLETE":
-            # Count trading days within the attempt window
-            trading_days_in_attempt = len({
-                d for d in attempt_trade_dates
-                if start_date <= d <= end_date
-            })
+            # Early exit: target reached AND min trading days met → PASS
+            if target_reached:
+                trading_days_so_far = len({
+                    d for d in attempt_trade_dates
+                    if start_date <= d <= bar_date
+                })
+                if trading_days_so_far >= phase.min_trading_days:
+                    outcome = "PASS"
+                    break
 
-            if target_reached and trading_days_in_attempt >= phase.min_trading_days:
-                outcome = "PASS"
-                # End the attempt at the date the target was reached (or min days met)
-                if target_reached_date:
-                    end_date = max(target_reached_date, start_date + timedelta(days=phase.min_trading_days - 1))
-                    # Clamp to actual data
-                    end_date = min(end_date, equity.index[end_bar].date())
+        # If we exited the loop without explicit outcome
+        if outcome == "INCOMPLETE":
+            if target_reached:
+                # Target was reached but not enough trading days before data ran out
+                trading_days_in_attempt = len({
+                    d for d in attempt_trade_dates
+                    if start_date <= d <= end_date
+                })
+                if trading_days_in_attempt >= phase.min_trading_days:
+                    outcome = "PASS"
             elif end_date >= max_end_date:
                 outcome = "FAIL_TIME"
 

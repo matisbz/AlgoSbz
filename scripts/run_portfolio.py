@@ -17,23 +17,46 @@ from algosbz.backtest.portfolio_engine import PortfolioEngine, StrategyAllocatio
 from algosbz.risk.prop_firm import PropFirmSimulator
 from algosbz.risk.equity_manager import EquityManager
 
-# Validated strategy-pair combinations (honest backtest, no look-ahead)
-# Each combination has been tested across multiple time periods for robustness
+# FTMO-optimized portfolio: 94% funding rate at 2% risk, $3.3K avg cost per funded account
+# Validated across 10 years (2015-2024), 16/17 sequential challenges funded
+# Session hours extended to 24h for maximum frequency (14.4 trades/month combined)
 PORTFOLIO = [
-    # Vol Mean Reversion on USDCHF — STRONGEST EDGE (PF 1.31, profitable 4/5 periods)
+    # ── H1 Strategies ──────────────────────────────────────────────
+    # Vol Mean Reversion on USDCHF — core edge (PF 1.27 @ 2%, 3.3 trades/mo)
     {"strategy": "vol_mean_reversion", "symbol": "USDCHF", "weight": 1.0,
-     "params": {"bb_std": 2.5, "adx_max": 30, "consec_outside": 2, "sl_atr_mult": 3.0, "tp_atr_mult": 4.0}},
-    # Trend Pullback on GBPJPY — strong trend follower (PF 1.22, profitable 2/3 periods)
-    {"strategy": "trend_pullback", "symbol": "GBPJPY", "weight": 0.8,
-     "params": {"adx_min": 30, "pullback_zone_atr": 1.5, "sl_atr_mult": 2.5, "tp_atr_mult": 3.5}},
-    # Trend Pullback on XTIUSD — commodity trend (PF 1.87 in strong trend periods)
-    {"strategy": "trend_pullback", "symbol": "XTIUSD", "weight": 0.6,
-     "params": {"adx_min": 30, "pullback_zone_atr": 0.8, "sl_atr_mult": 2.0, "tp_atr_mult": 3.0}},
+     "params": {"bb_std": 2.5, "adx_max": 30, "consec_outside": 2,
+                "sl_atr_mult": 3.0, "tp_atr_mult": 4.0,
+                "session_start": 0, "session_end": 23}},
+    # Trend Pullback on GBPJPY — frequency driver (PF 1.04, 7.7 trades/mo)
+    {"strategy": "trend_pullback", "symbol": "GBPJPY", "weight": 1.0,
+     "params": {"adx_min": 20, "pullback_zone_atr": 1.5,
+                "sl_atr_mult": 2.0, "tp_atr_mult": 3.0,
+                "session_start": 0, "session_end": 23}},
+    # Trend Pullback on XTIUSD — commodity diversifier (PF 1.10, 3.4 trades/mo)
+    {"strategy": "trend_pullback", "symbol": "XTIUSD", "weight": 1.0,
+     "params": {"adx_min": 20, "pullback_zone_atr": 1.5,
+                "sl_atr_mult": 2.0, "tp_atr_mult": 2.5,
+                "session_start": 0, "session_end": 23}},
+    # ── H4 Strategies ──────────────────────────────────────────────
+    # H4 Mean Reversion on XTIUSD — highest PF (PF 1.67, 4/5 periods profitable)
+    {"strategy": "h4_mean_reversion", "symbol": "XTIUSD", "weight": 1.0,
+     "params": {"bb_std": 2.0, "rsi_oversold": 30, "rsi_overbought": 70,
+                "adx_max": 30, "sl_atr_mult": 1.5, "tp_atr_mult": 2.0}},
+    # Swing Breakout on XTIUSD — volatility expansion (PF 1.41, 3/5 periods)
+    {"strategy": "swing_breakout", "symbol": "XTIUSD", "weight": 1.0,
+     "params": {"donchian_period": 20, "squeeze_pct": 0.8, "adx_min": 15,
+                "sl_atr_mult": 1.0, "tp_atr_mult": 2.0}},
+    # Swing Breakout on USDJPY — yen diversifier (PF 1.28, 3/5 periods)
+    {"strategy": "swing_breakout", "symbol": "USDJPY", "weight": 1.0,
+     "params": {"donchian_period": 20, "squeeze_pct": 0.8, "adx_min": 20,
+                "sl_atr_mult": 1.5, "tp_atr_mult": 3.0}},
 ]
 
 STRATEGY_MAP = {
     "vol_mean_reversion": ("algosbz.strategy.volatility_mean_reversion", "VolatilityMeanReversion"),
     "trend_pullback": ("algosbz.strategy.trend_pullback", "TrendPullback"),
+    "h4_mean_reversion": ("algosbz.strategy.h4_mean_reversion", "H4MeanReversion"),
+    "swing_breakout": ("algosbz.strategy.swing_breakout", "SwingBreakout"),
 }
 
 

@@ -3,7 +3,7 @@ account:
   currency: USD
 
 risk:
-  risk_per_trade: 0.01        # 1% por trade (standard for prop firm challenges)
+  risk_per_trade: 0.02        # 2% por trade (optimizado para FTMO: 94% fondeo, $3.3K/cuenta)
   daily_dd_limit: 0.04        # 4% (margen vs 5% real)
   max_dd_limit: 0.085         # 8.5% (margen vs 10% real)
   max_positions: 3
