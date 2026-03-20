@@ -1,0 +1,8 @@
+fast_period: 8
+slow_period: 21
+trend_period: 200
+atr_period: 14
+sl_atr_mult: 1.5
+tp_atr_mult: 2.0
+min_atr: 0.0
+timeframe: H1

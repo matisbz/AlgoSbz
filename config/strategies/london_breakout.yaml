@@ -1,0 +1,9 @@
+asian_start_hour: 0
+asian_end_hour: 8
+london_start_hour: 8
+cancel_hour: 12
+buffer_pips: 5
+tp_range_mult: 1.5
+min_range_pips: 15
+atr_period: 14
+timeframe: M5

@@ -1,0 +1,71 @@
+EURUSD:
+  pip_size: 0.0001
+  point_size: 0.00001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 1.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+GBPJPY:
+  pip_size: 0.01
+  point_size: 0.001
+  pip_value_per_lot: 6.7
+  default_spread_pips: 2.5
+  min_lot: 0.01
+  max_lot: 100.0
+
+USDCHF:
+  pip_size: 0.0001
+  point_size: 0.00001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 1.2
+  min_lot: 0.01
+  max_lot: 100.0
+
+USDJPY:
+  pip_size: 0.01
+  point_size: 0.001
+  pip_value_per_lot: 6.7
+  default_spread_pips: 1.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+XAUUSD:
+  pip_size: 0.1
+  point_size: 0.01
+  pip_value_per_lot: 1.0
+  default_spread_pips: 3.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+XTIUSD:
+  pip_size: 0.01
+  point_size: 0.001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 3.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+XNGUSD:
+  pip_size: 0.001
+  point_size: 0.0001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 5.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+SPY:
+  pip_size: 0.01
+  point_size: 0.01
+  pip_value_per_lot: 1.0
+  default_spread_pips: 1.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+NDAQ:
+  pip_size: 0.01
+  point_size: 0.01
+  pip_value_per_lot: 1.0
+  default_spread_pips: 2.0
+  min_lot: 0.01
+  max_lot: 100.0

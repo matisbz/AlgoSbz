@@ -1,0 +1,32 @@
+account:
+  initial_balance: 100000
+  currency: USD
+
+risk:
+  risk_per_trade: 0.01        # 1% por trade (standard for prop firm challenges)
+  daily_dd_limit: 0.04        # 4% (margen vs 5% real)
+  max_dd_limit: 0.085         # 8.5% (margen vs 10% real)
+  max_positions: 3
+  daily_reset_hour: 0         # UTC midnight
+  min_risk_reward: 1.0        # RR minimo para aceptar trade
+
+backtest:
+  spread_mode: data           # "data" = spread del CSV, "fixed" = de instruments.yaml
+  slippage_pips: 0.5
+  pessimistic_fills: true     # SL antes que TP si ambos tocados en mismo bar
+  commission_per_lot: 7.0     # USD round-trip por lote estandar
+
+prop_firm:
+  phases:
+    - name: "Fase 1"
+      profit_target: 0.08
+      daily_dd_limit: 0.05
+      max_dd_limit: 0.10
+      min_trading_days: 4
+      max_calendar_days: 30
+    - name: "Fase 2"
+      profit_target: 0.05
+      daily_dd_limit: 0.05
+      max_dd_limit: 0.10
+      min_trading_days: 4
+      max_calendar_days: 60
