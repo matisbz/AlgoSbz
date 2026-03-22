@@ -110,10 +110,12 @@ class SimulatedBroker:
         slippage = self._get_slippage()
         commission = self.commission_per_lot * order.volume
 
+        # Entry fill: BUY at ASK (price + spread/2), SELL at BID (price - spread/2)
+        # Plus adverse slippage in both directions
         if order.direction == Direction.LONG:
-            fill_price = order.price + spread + slippage
+            fill_price = order.price + spread / 2 + slippage
         else:
-            fill_price = order.price - slippage
+            fill_price = order.price - spread / 2 - slippage
 
         fill = Fill(
             order_id=order.id,
@@ -154,10 +156,11 @@ class SimulatedBroker:
         slippage = self._get_slippage()
         commission = self.commission_per_lot * order.volume
 
+        # Entry fill: BUY at ASK, SELL at BID (symmetric spread)
         if order.direction == Direction.LONG:
-            fill_price = order.price + spread + slippage
+            fill_price = order.price + spread / 2 + slippage
         else:
-            fill_price = order.price - slippage
+            fill_price = order.price - spread / 2 - slippage
 
         fill = Fill(
             order_id=order.id,

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tasklist)",
+      "Bash(findstr /i python)",
+      "Bash(python -u -X utf8 scripts/validate_combos.py)",
+      "Bash(python -X utf8 scripts/massive_scan.py)"
+    ]
+  }
+}

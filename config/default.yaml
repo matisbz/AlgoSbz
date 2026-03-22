@@ -19,7 +19,7 @@ backtest:
 prop_firm:
   phases:
     - name: "Fase 1"
-      profit_target: 0.08
+      profit_target: 0.10
       daily_dd_limit: 0.05
       max_dd_limit: 0.10
       min_trading_days: 4

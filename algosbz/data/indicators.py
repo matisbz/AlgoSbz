@@ -60,3 +60,52 @@ def adx(
 
     dx = 100 * (plus_di - minus_di).abs() / (plus_di + minus_di).replace(0, np.nan)
     return dx.ewm(alpha=alpha, min_periods=period, adjust=False).mean()
+
+
+def macd(
+    series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
+) -> pd.DataFrame:
+    ema_fast = ema(series, fast)
+    ema_slow = ema(series, slow)
+    macd_line = ema_fast - ema_slow
+    signal_line = ema(macd_line, signal)
+    histogram = macd_line - signal_line
+    return pd.DataFrame({
+        "macd": macd_line,
+        "signal": signal_line,
+        "histogram": histogram,
+    }, index=series.index)
+
+
+def stochastic(
+    high: pd.Series, low: pd.Series, close: pd.Series,
+    k_period: int = 14, d_period: int = 3,
+) -> pd.DataFrame:
+    lowest_low = low.rolling(window=k_period).min()
+    highest_high = high.rolling(window=k_period).max()
+    denom = highest_high - lowest_low
+    k = 100 * (close - lowest_low) / denom.replace(0, np.nan)
+    d = k.rolling(window=d_period).mean()
+    return pd.DataFrame({"stoch_k": k, "stoch_d": d}, index=close.index)
+
+
+def donchian(
+    high: pd.Series, low: pd.Series, period: int = 20
+) -> pd.DataFrame:
+    upper = high.rolling(window=period).max()
+    lower = low.rolling(window=period).min()
+    middle = (upper + lower) / 2
+    return pd.DataFrame({
+        "dc_upper": upper,
+        "dc_lower": lower,
+        "dc_middle": middle,
+    }, index=high.index)
+
+
+def cci(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 20
+) -> pd.Series:
+    tp = (high + low + close) / 3
+    tp_sma = sma(tp, period)
+    mean_dev = tp.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+    return (tp - tp_sma) / (0.015 * mean_dev.replace(0, np.nan))
