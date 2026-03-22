@@ -28,101 +28,189 @@ from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 logging.basicConfig(level=logging.ERROR)
 
+# ═══════════════════════════════════════════════════════════════════════
+# ALL VALIDATED COMBOS (from massive scan + Phase 3/4 validation)
+# ═══════════════════════════════════════════════════════════════════════
+
+STRAT_REGISTRY = {
+    "VMR": {"module": "algosbz.strategy.volatility_mean_reversion", "class": "VolatilityMeanReversion"},
+    "TPB": {"module": "algosbz.strategy.trend_pullback", "class": "TrendPullback"},
+    "SwBrk": {"module": "algosbz.strategy.swing_breakout", "class": "SwingBreakout"},
+    "IBB": {"module": "algosbz.strategy.inside_bar_breakout", "class": "InsideBarBreakout"},
+    "Engulf": {"module": "algosbz.strategy.engulfing_reversal", "class": "EngulfingReversal"},
+    "StrBrk": {"module": "algosbz.strategy.structure_break", "class": "StructureBreak"},
+    "MomDiv": {"module": "algosbz.strategy.momentum_divergence", "class": "MomentumDivergence"},
+    "RegVMR": {"module": "algosbz.strategy.regime_vmr", "class": "RegimeAdaptiveVMR"},
+    "EMArib": {"module": "algosbz.strategy.ema_ribbon_trend", "class": "EMARibbonTrend"},
+    "SessBrk": {"module": "algosbz.strategy.session_breakout_v2", "class": "SessionBreakout"},
+    "SMCOB": {"module": "algosbz.strategy.smc_order_block", "class": "SMCOrderBlock"},
+    "FVGrev": {"module": "algosbz.strategy.fvg_reversion", "class": "FVGReversion"},
+    "VWAPrev": {"module": "algosbz.strategy.vwap_reversion", "class": "VWAPReversion"},
+}
+
 ALL_COMBOS = {
-    # === Original Core3 (validated post-audit) ===
-    "VMR_USDCHF_H1": {
-        "module": "algosbz.strategy.volatility_mean_reversion",
-        "class": "VolatilityMeanReversion",
-        "symbol": "USDCHF",
-        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    # ── ROBUST (16): passed spread +50% AND param sensitivity ±20% ──
+    "VMR_SPY_H4": {
+        "strat": "VMR", "symbol": "SPY", "tier": "ROBUST", "pf": 1.34,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "TPB_XTIUSD_loose_H4": {
+        "strat": "TPB", "symbol": "XTIUSD", "tier": "ROBUST", "pf": 1.40,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
+    },
+    "TPB_XNGUSD_loose_H4": {
+        "strat": "TPB", "symbol": "XNGUSD", "tier": "ROBUST", "pf": 1.37,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
     },
     "SwBrk_XTIUSD_H4": {
-        "module": "algosbz.strategy.swing_breakout",
-        "class": "SwingBreakout",
-        "symbol": "XTIUSD",
+        "strat": "SwBrk", "symbol": "XTIUSD", "tier": "ROBUST", "pf": 1.29,
         "params": {"timeframe": "H4"},
-    },
-    "MomDiv_SPY_H1": {
-        "module": "algosbz.strategy.momentum_divergence",
-        "class": "MomentumDivergence",
-        "symbol": "SPY",
-        "params": {"timeframe": "H1"},
-    },
-    # === Existing strategies, new validated combos ===
-    "TPB_XTIUSD_H4": {
-        "module": "algosbz.strategy.trend_pullback",
-        "class": "TrendPullback",
-        "symbol": "XTIUSD",
-        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
-    },
-    "VMR_USDJPY_H4": {
-        "module": "algosbz.strategy.volatility_mean_reversion",
-        "class": "VolatilityMeanReversion",
-        "symbol": "USDJPY",
-        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
     },
     "SwBrk_SPY_H4": {
-        "module": "algosbz.strategy.swing_breakout",
-        "class": "SwingBreakout",
-        "symbol": "SPY",
+        "strat": "SwBrk", "symbol": "SPY", "tier": "ROBUST", "pf": 1.05,
         "params": {"timeframe": "H4"},
     },
-    "Engulf_EURUSD_H4": {
-        "module": "algosbz.strategy.engulfing_reversal",
-        "class": "EngulfingReversal",
-        "symbol": "EURUSD",
-        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    "SwBrk_SPY_slow_H4": {
+        "strat": "SwBrk", "symbol": "SPY", "tier": "ROBUST", "pf": 1.72,
+        "params": {"timeframe": "H4", "donchian_period": 30, "squeeze_pct": 0.75, "tp_atr_mult": 4.0},
     },
-    # === New strategies (Fase 1) ===
+    "Engulf_EURUSD_tight_H4": {
+        "strat": "Engulf", "symbol": "EURUSD", "tier": "ROBUST", "pf": 1.33,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
+    },
+    "Engulf_XAUUSD_tight_H4": {
+        "strat": "Engulf", "symbol": "XAUUSD", "tier": "ROBUST", "pf": 1.39,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
+    },
+    "StrBrk_GBPJPY_slow_H4": {
+        "strat": "StrBrk", "symbol": "GBPJPY", "tier": "ROBUST", "pf": 1.21,
+        "params": {"timeframe": "H4", "swing_lookback": 7, "tp_atr_mult": 4.0},
+    },
+    "MomDiv_SPY_H1": {
+        "strat": "MomDiv", "symbol": "SPY", "tier": "ROBUST", "pf": 1.14,
+        "params": {"timeframe": "H1"},
+    },
     "RegVMR_XAUUSD_H1": {
-        "module": "algosbz.strategy.regime_vmr",
-        "class": "RegimeAdaptiveVMR",
-        "symbol": "XAUUSD",
+        "strat": "RegVMR", "symbol": "XAUUSD", "tier": "ROBUST", "pf": 1.25,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    },
+    "RegVMR_XTIUSD_H1": {
+        "strat": "RegVMR", "symbol": "XTIUSD", "tier": "ROBUST", "pf": 1.35,
         "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
     },
     "SessBrk_XTIUSD_M15": {
-        "module": "algosbz.strategy.session_breakout_v2",
-        "class": "SessionBreakout",
-        "symbol": "XTIUSD",
+        "strat": "SessBrk", "symbol": "XTIUSD", "tier": "ROBUST", "pf": 2.01,
         "params": {"timeframe": "M15"},
     },
-    "SMCOB_XAUUSD_H4": {
-        "module": "algosbz.strategy.smc_order_block",
-        "class": "SMCOrderBlock",
-        "symbol": "XAUUSD",
+    "SMCOB_GBPJPY_H1": {
+        "strat": "SMCOB", "symbol": "GBPJPY", "tier": "ROBUST", "pf": 1.10,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    },
+    "SMCOB_XAUUSD_loose_H4": {
+        "strat": "SMCOB", "symbol": "XAUUSD", "tier": "ROBUST", "pf": 1.49,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "rejection_wick_ratio": 0.4, "tp_atr_mult": 2.5},
+    },
+    "SMCOB_GBPJPY_tight_H1": {
+        "strat": "SMCOB", "symbol": "GBPJPY", "tier": "ROBUST", "pf": 1.09,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "rejection_wick_ratio": 0.6, "sl_atr_mult": 1.0, "tp_atr_mult": 2.0},
+    },
+    # ── SPREAD_OK (11): passed spread +50% but sensitive to param changes ──
+    "VMR_USDCHF_H1": {
+        "strat": "VMR", "symbol": "USDCHF", "tier": "SPREAD_OK", "pf": 1.29,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    },
+    "VMR_USDJPY_H4": {
+        "strat": "VMR", "symbol": "USDJPY", "tier": "SPREAD_OK", "pf": 1.07,
         "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
     },
-    "SMCOB_GBPJPY_H1": {
-        "module": "algosbz.strategy.smc_order_block",
-        "class": "SMCOrderBlock",
-        "symbol": "GBPJPY",
-        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    "TPB_XTIUSD_H4": {
+        "strat": "TPB", "symbol": "XTIUSD", "tier": "SPREAD_OK", "pf": 1.09,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "TPB_GBPJPY_loose_H1": {
+        "strat": "TPB", "symbol": "GBPJPY", "tier": "SPREAD_OK", "pf": 1.10,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
+    },
+    "SwBrk_SPY_fast_H4": {
+        "strat": "SwBrk", "symbol": "SPY", "tier": "SPREAD_OK", "pf": 1.15,
+        "params": {"timeframe": "H4", "donchian_period": 10, "squeeze_pct": 0.85, "adx_min": 15},
+    },
+    "IBB_EURUSD_loose_H4": {
+        "strat": "IBB", "symbol": "EURUSD", "tier": "SPREAD_OK", "pf": 1.05,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "min_bar_range_pct": 0.2, "sl_atr_mult": 2.0, "tp_atr_mult": 4.0},
+    },
+    "Engulf_EURUSD_H4": {
+        "strat": "Engulf", "symbol": "EURUSD", "tier": "SPREAD_OK", "pf": 1.05,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "MomDiv_SPY_loose_H1": {
+        "strat": "MomDiv", "symbol": "SPY", "tier": "SPREAD_OK", "pf": 1.09,
+        "params": {"timeframe": "H1", "min_rsi_diff": 2, "divergence_window": 40, "swing_lookback": 3},
+    },
+    "EMArib_XNGUSD_loose_H4": {
+        "strat": "EMArib", "symbol": "XNGUSD", "tier": "SPREAD_OK", "pf": 1.23,
+        "params": {"timeframe": "H4", "ribbon_threshold": 0.5, "ribbon_confirm_bars": 2,
+                   "rsi_pullback_bull": 50, "rsi_pullback_bear": 50},
+    },
+    "SMCOB_XAUUSD_H4": {
+        "strat": "SMCOB", "symbol": "XAUUSD", "tier": "SPREAD_OK", "pf": 1.29,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "RegVMR_XAUUSD_loose_H1": {
+        "strat": "RegVMR", "symbol": "XAUUSD", "tier": "SPREAD_OK", "pf": 1.20,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "bb_std": 2.0, "consec_outside": 1},
     },
 }
 
-# Deck configurations
+# ═══════════════════════════════════════════════════════════════════════
+# DECK CONFIGURATIONS
+# ═══════════════════════════════════════════════════════════════════════
+
+def _robust_only():
+    return [k for k, v in ALL_COMBOS.items() if v["tier"] == "ROBUST"]
+
+def _best_per_instrument():
+    """Best ROBUST combo per instrument (max diversification)."""
+    best = {}
+    for k, v in ALL_COMBOS.items():
+        if v["tier"] != "ROBUST":
+            continue
+        sym = v["symbol"]
+        if sym not in best or v["pf"] > best[sym][1]:
+            best[sym] = (k, v["pf"])
+    return [name for name, _ in best.values()]
+
+def _top_pf(n=10):
+    """Top N combos by PF from ROBUST tier."""
+    robust = [(k, v["pf"]) for k, v in ALL_COMBOS.items() if v["tier"] == "ROBUST"]
+    robust.sort(key=lambda x: x[1], reverse=True)
+    return [k for k, _ in robust[:n]]
+
 DECKS = {
-    "Core3": ["VMR_USDCHF_H1", "SwBrk_XTIUSD_H4", "MomDiv_SPY_H1"],
-    "SuperDeck11": [
+    "Core3": [
         "VMR_USDCHF_H1", "SwBrk_XTIUSD_H4", "MomDiv_SPY_H1",
-        "TPB_XTIUSD_H4", "VMR_USDJPY_H4", "SwBrk_SPY_H4", "Engulf_EURUSD_H4",
-        "RegVMR_XAUUSD_H1", "SessBrk_XTIUSD_M15", "SMCOB_XAUUSD_H4", "SMCOB_GBPJPY_H1",
     ],
-    "TopPF": [
-        "VMR_USDCHF_H1", "SwBrk_XTIUSD_H4", "RegVMR_XAUUSD_H1",
-        "SessBrk_XTIUSD_M15", "SMCOB_XAUUSD_H4",
-    ],
-    "MultiAsset": [
-        "VMR_USDCHF_H1", "MomDiv_SPY_H1", "RegVMR_XAUUSD_H1",
-        "SMCOB_GBPJPY_H1", "Engulf_EURUSD_H4",
-    ],
+    "Robust16": _robust_only(),
+    "BestPerInstr": _best_per_instrument(),
+    "TopPF10": _top_pf(10),
+    "Full27": list(ALL_COMBOS.keys()),
 }
 
 
 def load_strategy(entry):
     import importlib
-    mod = importlib.import_module(entry["module"])
-    cls = getattr(mod, entry["class"])
+    info = STRAT_REGISTRY[entry["strat"]]
+    mod = importlib.import_module(info["module"])
+    cls = getattr(mod, info["class"])
     return cls(entry["params"])
 
 
@@ -135,11 +223,9 @@ def run_phase(config, instruments, data_dict, combo_names, risk_pct,
     - DD limits are STATIC from INITIAL balance ($100K), not from current balance
     - Daily DD: 5% of initial = equity can't drop more than $5K in a day
     - Total DD: 10% of initial = equity can't drop below $90K ever
-
-    Returns dict with outcome, final equity, profit, trades, etc.
     """
     end_date = start_date + timedelta(days=window_days)
-    initial = config.account.initial_balance  # Always $100K (DD reference)
+    initial = config.account.initial_balance
 
     cfg = deepcopy(config)
     cfg.risk.risk_per_trade = risk_pct
@@ -219,13 +305,11 @@ def run_phase(config, instruments, data_dict, combo_names, risk_pct,
         if isinstance(trade_ts, pd.Timestamp):
             eq_before = combined_equity[combined_equity.index <= trade_ts]
             if not eq_before.empty:
-                # Profit is always relative to INITIAL ($100K)
                 profit_now = (eq_before.iloc[-1] - initial) / initial * 100
                 if profit_now >= profit_target_pct and len(trading_days_so_far) >= 4:
                     lock_ts = trade_ts
                     break
 
-    # Calculate metrics up to lock point (or full window)
     if lock_ts:
         eq = combined_equity[combined_equity.index <= lock_ts]
         trades_counted = [t for t in all_trades if t["ts"] <= lock_ts]
@@ -240,7 +324,7 @@ def run_phase(config, instruments, data_dict, combo_names, risk_pct,
     # DD is STATIC from initial balance ($100K)
     max_dd = 0
     for val in eq:
-        dd = (initial - val) / initial  # Always from $100K, not peak
+        dd = (initial - val) / initial
         max_dd = max(max_dd, dd)
 
     max_daily_dd = 0
@@ -250,13 +334,11 @@ def run_phase(config, instruments, data_dict, combo_names, risk_pct,
             ddd = (row["first"] - row["min"]) / row["first"]
             max_daily_dd = max(max_daily_dd, ddd)
 
-    # Days used (for P2 start date calculation)
     if lock_ts:
         days_used = (lock_ts - pd.Timestamp(start_date)).days + 1
     else:
         days_used = window_days
 
-    # Determine outcome
     if max_dd >= 0.10:
         outcome = "FAIL_DD"
     elif max_daily_dd >= 0.05:
@@ -280,33 +362,17 @@ def run_phase(config, instruments, data_dict, combo_names, risk_pct,
     }
 
 
-def run_full_exam(config, instruments, data_dict, combo_names, risk_pct,
-                  start_date):
+def run_full_exam(config, instruments, data_dict, combo_names, risk_pct, start_date):
     """
     Run full FTMO 2-step exam: Phase 1 (30 days) then Phase 2 (60 days).
-
-    P1: 10% target, 30 days
-    P2: 5% target, 60 days, balance carries over (but DD still from $100K initial)
-
-    Since there's no time limit in current FTMO rules, we use generous windows
-    (30 days P1, 60 days P2) as a practical simulation period.
+    P1: 10% target, 30 days | P2: 5% target, 60 days, balance carries over
     """
-    # Phase 1: 10% target, 30 days
     p1 = run_phase(config, instruments, data_dict, combo_names, risk_pct,
                    start_date, window_days=30, profit_target_pct=10.0)
 
     if p1["outcome"] != "PASS":
-        return {
-            "exam_outcome": f"FAIL_P1_{p1['outcome']}",
-            "p1": p1,
-            "p2": None,
-        }
+        return {"exam_outcome": f"FAIL_P1_{p1['outcome']}", "p1": p1, "p2": None}
 
-    # Phase 2: starts after P1 ends, 60 days, target 5%
-    # Balance carries over — but our backtest engine always starts at $100K
-    # The key insight: DD is still from $100K initial, and we need +5% from initial
-    # So if P1 ended at $110K, we need to get to $105K total (which means we can
-    # actually LOSE some of the P1 gains and still pass P2)
     p2_start = start_date + timedelta(days=p1["days_used"])
     p2 = run_phase(config, instruments, data_dict, combo_names, risk_pct,
                    p2_start, window_days=60, profit_target_pct=5.0)
@@ -316,11 +382,7 @@ def run_full_exam(config, instruments, data_dict, combo_names, risk_pct,
     else:
         exam_outcome = f"FAIL_P2_{p2['outcome']}"
 
-    return {
-        "exam_outcome": exam_outcome,
-        "p1": p1,
-        "p2": p2,
-    }
+    return {"exam_outcome": exam_outcome, "p1": p1, "p2": p2}
 
 
 def main():
@@ -331,37 +393,36 @@ def main():
     all_symbols = list({e["symbol"] for e in ALL_COMBOS.values()})
     data_dict = {}
     print("Loading data...")
-    for sym in all_symbols:
+    for sym in sorted(all_symbols):
         try:
             data_dict[sym] = loader.load(sym, start="2014-09-01", end="2025-01-01")
             print(f"  {sym}: {len(data_dict[sym]):,} bars")
         except Exception as e:
             print(f"  {sym}: FAILED - {e}")
 
-    # Windows: every 90 days (each exam can take up to 90 days total)
     window_starts = pd.date_range("2015-01-01", "2024-06-01", freq="90D")
     print(f"\n  Exam windows: {len(window_starts)} (every 90 days, P1=30d + P2=60d)")
 
     print(f"\n{'='*120}")
-    print(f"  FTMO 2-STEP CHALLENGE — Correct Rules")
+    print(f"  FTMO 2-STEP CHALLENGE SIMULATION")
     print(f"  P1: 10% target, 30 days | P2: 5% target, 60 days, balance carries over")
-    print(f"  DD: 5% daily / 10% total (static from $100K) | Min 4 trading days each phase")
-    print(f"  Profit lock active in both phases")
+    print(f"  DD: 5% daily / 10% total (static from $100K) | Min 4 trading days | Profit lock ON")
     print(f"{'='*120}")
 
     all_results = []
 
     for risk in [0.02, 0.03]:
-        print(f"\n  === Risk: {risk*100:.0f}% ===")
+        print(f"\n  === Risk: {risk*100:.0f}% per trade ===")
 
         for deck_name, combo_names in DECKS.items():
             available = [c for c in combo_names if ALL_COMBOS[c]["symbol"] in data_dict]
             if len(available) < len(combo_names):
                 missing = set(combo_names) - set(available)
-                print(f"\n  {deck_name}: SKIP (missing: {missing})")
+                print(f"\n  {deck_name}: SKIP (missing data: {missing})")
                 continue
 
-            print(f"\n  {deck_name} ({len(combo_names)} combos):", end=" ", flush=True)
+            n_robust = sum(1 for c in combo_names if ALL_COMBOS[c]["tier"] == "ROBUST")
+            print(f"\n  {deck_name} ({len(combo_names)} combos, {n_robust} robust):", end=" ", flush=True)
 
             exam_outcomes = defaultdict(int)
             p1_outcomes = defaultdict(int)
@@ -370,19 +431,14 @@ def main():
             funded_count = 0
 
             for i, start in enumerate(window_starts):
-                r = run_full_exam(config, instruments, data_dict, combo_names,
-                                  risk, start)
+                r = run_full_exam(config, instruments, data_dict, combo_names, risk, start)
                 exam_outcomes[r["exam_outcome"]] += 1
-
                 p1_outcomes[r["p1"]["outcome"]] += 1
                 p1_profits.append(r["p1"]["profit_pct"])
-
                 if r["p2"] is not None:
                     p2_outcomes[r["p2"]["outcome"]] += 1
-
                 if r["exam_outcome"] == "FUNDED":
                     funded_count += 1
-
                 if (i + 1) % 10 == 0:
                     print(".", end="", flush=True)
 
@@ -409,17 +465,12 @@ def main():
             print(f"    FUNDED: {funded_count}/{n} ({funded_rate:.1f}%)")
 
             all_results.append({
-                "deck": deck_name,
-                "risk": f"{risk*100:.0f}%",
-                "combos": len(combo_names),
-                "n": n,
-                "p1_pass": p1_pass,
-                "p1_rate": p1_rate,
-                "p2_tested": p2_tested,
-                "p2_pass": funded_count,
+                "deck": deck_name, "risk": f"{risk*100:.0f}%",
+                "combos": len(combo_names), "robust": n_robust, "n": n,
+                "p1_pass": p1_pass, "p1_rate": p1_rate,
+                "p2_tested": p2_tested, "p2_pass": funded_count,
                 "p2_rate": p2_pass_of_tested,
-                "funded": funded_count,
-                "funded_rate": funded_rate,
+                "funded": funded_count, "funded_rate": funded_rate,
                 "avg_p1_profit": np.mean(p1_profits),
             })
 
@@ -427,41 +478,37 @@ def main():
     print(f"\n\n{'='*120}")
     print(f"  SUMMARY — FTMO 2-Step End-to-End")
     print(f"{'='*120}")
-    print(f"  {'Deck':<20s} {'Risk':>4s} {'#':>2s} "
-          f"{'P1 Pass':>8s} {'P1 Rate':>7s} "
-          f"{'P2 Pass':>8s} {'P2 Rate':>7s} "
+    print(f"  {'Deck':<18s} {'Risk':>4s} {'#':>3s} {'Rob':>3s} "
+          f"{'P1 Pass':>8s} {'P1%':>6s} "
+          f"{'P2 Pass':>8s} {'P2%':>6s} "
           f"{'FUNDED':>8s} {'Fund%':>6s} "
-          f"{'AvgP1%':>7s}")
-    print(f"  {'-'*100}")
+          f"{'AvgP1':>7s}")
+    print(f"  {'-'*110}")
     for r in sorted(all_results, key=lambda x: -x["funded_rate"]):
         p2_str = f"{r['p2_pass']}/{r['p2_tested']}" if r['p2_tested'] > 0 else "n/a"
         p2_rate_str = f"{r['p2_rate']:.1f}%" if r['p2_tested'] > 0 else "n/a"
-        print(f"  {r['deck']:<20s} {r['risk']:>4s} {r['combos']:>2d} "
-              f"{r['p1_pass']:>3d}/{r['n']:<4d} {r['p1_rate']:>6.1f}% "
-              f"{p2_str:>8s} {p2_rate_str:>7s} "
+        print(f"  {r['deck']:<18s} {r['risk']:>4s} {r['combos']:>3d} {r['robust']:>3d} "
+              f"{r['p1_pass']:>3d}/{r['n']:<4d} {r['p1_rate']:>5.1f}% "
+              f"{p2_str:>8s} {p2_rate_str:>6s} "
               f"{r['funded']:>3d}/{r['n']:<4d} {r['funded_rate']:>5.1f}% "
               f"{r['avg_p1_profit']:>+6.2f}%")
 
     # ROI analysis
     print(f"\n{'='*120}")
-    print(f"  ROI — €80/exam, $10K accounts, 80% profit split")
-    print(f"{'='*120}")
-    print(f"  Note: each exam takes ~30-90 days. With unlimited time, we model")
-    print(f"  buying 10 exams/month and running them in parallel.\n")
+    print(f"  ROI — EUR80/exam, $10K accounts, 80% profit split")
+    print(f"{'='*120}\n")
 
-    for r in sorted(all_results, key=lambda x: -x["funded_rate"])[:6]:
+    for r in sorted(all_results, key=lambda x: -x["funded_rate"])[:8]:
         fr = r["funded_rate"] / 100
         if fr > 0:
             cost_per_funded = 80 / fr
-            # 10 parallel exams per month, each takes ~2-3 months
-            # Steady state: ~10 new exams/month completing
             monthly_funded = 10 * fr
-            monthly_income = monthly_funded * 400  # ~$400/month per $10K funded
-            print(f"  {r['deck']:<20s} @{r['risk']:>3s}: "
-                  f"P1={r['p1_rate']:5.1f}% × P2={r['p2_rate']:5.1f}% = "
+            monthly_income = monthly_funded * 400
+            print(f"  {r['deck']:<18s} @{r['risk']:>3s}: "
+                  f"P1={r['p1_rate']:5.1f}% x P2={r['p2_rate']:5.1f}% = "
                   f"{r['funded_rate']:5.1f}% funded/exam | "
-                  f"€{cost_per_funded:,.0f}/funded | "
-                  f"10 exams/mo → {monthly_funded:.1f} funded → €{monthly_income:,.0f}/mo")
+                  f"EUR{cost_per_funded:,.0f}/funded | "
+                  f"10 exams/mo -> {monthly_funded:.1f} funded -> EUR{monthly_income:,.0f}/mo")
 
 
 if __name__ == "__main__":
