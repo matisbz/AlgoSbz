@@ -4,7 +4,15 @@
       "Bash(tasklist)",
       "Bash(findstr /i python)",
       "Bash(python -u -X utf8 scripts/validate_combos.py)",
-      "Bash(python -X utf8 scripts/massive_scan.py)"
+      "Bash(python -X utf8 scripts/massive_scan.py)",
+      "Bash(python -X utf8 scripts/optimize_deck.py)",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python -X utf8 scripts/walk_forward.py)",
+      "Bash(python -X utf8 scripts/diagnose_2025.py)",
+      "Bash(python -X utf8 scripts/adaptive_deck.py)",
+      "Bash(python -X utf8 scripts/production_sim.py)"
     ]
   }
 }
