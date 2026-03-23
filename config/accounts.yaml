@@ -1,0 +1,104 @@
+# ═══════════════════════════════════════════════════════════════
+# LIVE TRADING — Account Configuration
+# ═══════════════════════════════════════════════════════════════
+#
+# Fill in your MT5 credentials below. Each account gets ALL 16 combos.
+# Buy exams staggered ~7 days apart for decorrelation.
+#
+# States: phase1 → phase2 → funded (auto-updated by the system)
+#
+# HOW TO USE:
+# 1. Fill in login, password, server for each account
+# 2. Set start_date to the day you bought the exam
+# 3. Run: python -X utf8 scripts/live_trader.py
+# ═══════════════════════════════════════════════════════════════
+
+accounts:
+  - name: "Account_1"
+    enabled: true
+    login: 0              # ← MT5 account number
+    password: ""          # ← MT5 password
+    server: ""            # ← MT5 server name (e.g. "FTMO-Demo", "TheFundedTrader-Server")
+    start_date: ""        # ← Exam purchase date (YYYY-MM-DD)
+    state: phase1         # phase1 | phase2 | funded  (auto-updated)
+    initial_balance: 100000
+
+  - name: "Account_2"
+    enabled: false
+    login: 0
+    password: ""
+    server: ""
+    start_date: ""
+    state: phase1
+    initial_balance: 100000
+
+  - name: "Account_3"
+    enabled: false
+    login: 0
+    password: ""
+    server: ""
+    start_date: ""
+    state: phase1
+    initial_balance: 100000
+
+  - name: "Account_4"
+    enabled: false
+    login: 0
+    password: ""
+    server: ""
+    start_date: ""
+    state: phase1
+    initial_balance: 100000
+
+
+# ═══════════════════════════════════════════════════════════════
+# TRADING CONFIG — do NOT modify unless you know what you're doing
+# ═══════════════════════════════════════════════════════════════
+
+# Exam mode (phase1 & phase2): aggressive to pass fast
+exam_mode:
+  risk_per_trade: 0.02    # 2% risk per trade
+  daily_cap_pct: 2.5      # Stop trading if daily loss >= 2.5%
+  cooldown: 1             # Max 1 loss per combo per day
+  max_instr_per_day: 2    # Max 2 trades per instrument per day
+  max_daily_losses: 3     # Max 3 total losses per day
+  p2_risk_factor: 0.5     # Half risk in Phase 2
+
+# Funded mode: conservative to survive long
+funded_mode:
+  risk_per_trade: 0.014   # 2% × 0.7 = 1.4% effective risk
+  daily_cap_pct: 1.5      # Tighter daily cap
+  cooldown: 2             # Max 2 losses per combo per day
+  max_instr_per_day: 2
+  max_daily_losses: 3
+
+# Deck — the 16 combos (Decorr16_A)
+deck:
+  - SessBrk_XTIUSD_M15
+  - SwBrk_SPY_slow_H4
+  - SMCOB_XAUUSD_loose_H4
+  - Engulf_XAUUSD_tight_H4
+  - TPB_XTIUSD_loose_H4
+  - TPB_XNGUSD_loose_H4
+  - RegVMR_XTIUSD_H1
+  - VMR_SPY_H4
+  - Engulf_EURUSD_tight_H4
+  - SwBrk_XTIUSD_H4
+  - VMR_USDCHF_H1
+  - RegVMR_XAUUSD_H1
+  - StrBrk_GBPJPY_slow_H4
+  - EMArib_XNGUSD_loose_H4
+  - SMCOB_XAUUSD_H4
+  - SwBrk_SPY_fast_H4
+
+# Symbol mapping: our internal name → MT5 symbol name
+# Adjust these to match your broker's symbol names
+symbol_map:
+  EURUSD: "EURUSD"        # ← Change if broker uses EURUSD.r, EURUSDm, etc.
+  GBPJPY: "GBPJPY"
+  USDCHF: "USDCHF"
+  USDJPY: "USDJPY"
+  XAUUSD: "XAUUSD"        # ← Some brokers use GOLD, GOLDm
+  XTIUSD: "XTIUSD"        # ← Some brokers use USOIL, WTI, CrudeOIL
+  XNGUSD: "XNGUSD"        # ← Some brokers use NATGAS, NGAS
+  SPY: "US500"             # ← FTMO usually offers US500, not SPY

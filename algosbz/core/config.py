@@ -29,24 +29,10 @@ class BacktestConfig(BaseModel):
     commission_per_lot: float = 7.0
 
 
-class ChallengePhaseConfig(BaseModel):
-    name: str
-    profit_target: float
-    daily_dd_limit: float
-    max_dd_limit: float
-    min_trading_days: int
-    max_calendar_days: int
-
-
-class PropFirmConfig(BaseModel):
-    phases: list[ChallengePhaseConfig]
-
-
 class AppConfig(BaseModel):
     account: AccountConfig = AccountConfig()
     risk: RiskConfig = RiskConfig()
     backtest: BacktestConfig = BacktestConfig()
-    prop_firm: Optional[PropFirmConfig] = None
 
 
 class InstrumentConfig(BaseModel):

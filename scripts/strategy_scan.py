@@ -42,14 +42,6 @@ STRATEGIES = {
             "H4": {"timeframe": "H4"},
         },
     },
-    "H4MR": {
-        "module": "algosbz.strategy.h4_mean_reversion",
-        "class": "H4MeanReversion",
-        "timeframes": {
-            "H1": {"timeframe": "H1"},
-            "H4": {"timeframe": "H4"},
-        },
-    },
     "SwBrk": {
         "module": "algosbz.strategy.swing_breakout",
         "class": "SwingBreakout",
@@ -85,14 +77,6 @@ STRATEGIES = {
     "MomDiv": {
         "module": "algosbz.strategy.momentum_divergence",
         "class": "MomentumDivergence",
-        "timeframes": {
-            "H1": {"timeframe": "H1"},
-            "H4": {"timeframe": "H4"},
-        },
-    },
-    "KSqz": {
-        "module": "algosbz.strategy.keltner_squeeze",
-        "class": "KeltnerSqueeze",
         "timeframes": {
             "H1": {"timeframe": "H1"},
             "H4": {"timeframe": "H4"},

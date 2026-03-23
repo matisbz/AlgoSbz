@@ -2,7 +2,7 @@
 FTMO 2-Step Challenge simulation with CORRECT rules.
 
 Phase 1: 10% profit target, 5% daily DD, 10% total DD (static from initial), 4 min days
-Phase 2: 5% profit target, same DD limits, balance carries over from P1 (NO reset)
+Phase 2: 5% profit target, same DD limits, balance RESETS to initial (NOT carried over)
 
 Both phases: profit lock (stop trading once target hit with 4+ days).
 No best day rule (that's only for 1-step).

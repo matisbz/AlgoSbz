@@ -82,14 +82,12 @@ STRATEGIES = {
     "Engulf": {"module": "algosbz.strategy.engulfing_reversal", "class": "EngulfingReversal"},
     "StrBrk": {"module": "algosbz.strategy.structure_break", "class": "StructureBreak"},
     "MomDiv": {"module": "algosbz.strategy.momentum_divergence", "class": "MomentumDivergence"},
-    "KSqz": {"module": "algosbz.strategy.keltner_squeeze", "class": "KeltnerSqueeze"},
     "RegVMR": {"module": "algosbz.strategy.regime_vmr", "class": "RegimeAdaptiveVMR"},
     "EMArib": {"module": "algosbz.strategy.ema_ribbon_trend", "class": "EMARibbonTrend"},
     "SessBrk": {"module": "algosbz.strategy.session_breakout_v2", "class": "SessionBreakout"},
     "SMCOB": {"module": "algosbz.strategy.smc_order_block", "class": "SMCOrderBlock"},
     "FVGrev": {"module": "algosbz.strategy.fvg_reversion", "class": "FVGReversion"},
     "VWAPrev": {"module": "algosbz.strategy.vwap_reversion", "class": "VWAPReversion"},
-    "H4MR": {"module": "algosbz.strategy.h4_mean_reversion", "class": "H4MeanReversion"},
 }
 
 

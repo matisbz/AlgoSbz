@@ -12,7 +12,15 @@
       "Bash(python -X utf8 scripts/walk_forward.py)",
       "Bash(python -X utf8 scripts/diagnose_2025.py)",
       "Bash(python -X utf8 scripts/adaptive_deck.py)",
-      "Bash(python -X utf8 scripts/production_sim.py)"
+      "Bash(python -X utf8 scripts/production_sim.py)",
+      "Bash(python3:*)",
+      "Bash(python -X utf8 scripts/audit_biases.py)",
+      "Bash(head -30 /c/Users/mateo/Desktop/Proyectos/AlgoSbz/scripts/*.py)",
+      "Bash(ls /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/strategy/*.py)",
+      "Bash(xargs -I {} basename {} .py)",
+      "Bash(ls -lthS /c/Users/mateo/Desktop/Proyectos/AlgoSbz/scripts/*.py)",
+      "Bash(xargs basename:*)",
+      "Bash(grep \"module.*algosbz\\\\.strategy\" /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/dashboard/pages/*.py)"
     ]
   }
 }

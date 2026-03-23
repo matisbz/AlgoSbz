@@ -49,16 +49,6 @@ STRATEGIES = {
             "loose_H4": {"timeframe": "H4", "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
         },
     },
-    "H4MR": {
-        "module": "algosbz.strategy.h4_mean_reversion",
-        "class": "H4MeanReversion",
-        "presets": {
-            "default_H4": {"timeframe": "H4"},
-            "default_H1": {"timeframe": "H1"},
-            "loose_H4": {"timeframe": "H4", "rsi_oversold": 35, "rsi_overbought": 65, "bb_std": 1.5, "adx_max": 35},
-            "tight_H4": {"timeframe": "H4", "rsi_oversold": 25, "rsi_overbought": 75, "bb_std": 2.5},
-        },
-    },
     "SwBrk": {
         "module": "algosbz.strategy.swing_breakout",
         "class": "SwingBreakout",
@@ -109,16 +99,6 @@ STRATEGIES = {
             "default_H1": {"timeframe": "H1"},
             "loose_H4": {"timeframe": "H4", "min_rsi_diff": 2, "divergence_window": 40, "swing_lookback": 3},
             "loose_H1": {"timeframe": "H1", "min_rsi_diff": 2, "divergence_window": 40, "swing_lookback": 3},
-        },
-    },
-    "KSqz": {
-        "module": "algosbz.strategy.keltner_squeeze",
-        "class": "KeltnerSqueeze",
-        "presets": {
-            "default_H1": {"timeframe": "H1"},
-            "default_H4": {"timeframe": "H4"},
-            "tight_H1": {"timeframe": "H1", "kc_mult": 1.0, "squeeze_bars": 2, "tp_atr_mult": 2.5},
-            "wide_H1": {"timeframe": "H1", "kc_mult": 2.0, "squeeze_bars": 5, "tp_atr_mult": 4.0},
         },
     },
     "RegVMR": {
