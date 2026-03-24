@@ -83,6 +83,10 @@ class AccountState:
 
     def new_day(self, equity: float):
         """Reset daily counters. Called when a new trading day starts."""
+        # Count trading day if we traded yesterday
+        if self._current_day is not None and self.total_trades > 0:
+            if sum(self._instr_day_trades.values()) > 0:
+                self.trading_days += 1
         self._current_day = date.today()
         self._day_start_equity = equity
         self.current_equity = equity
@@ -90,8 +94,8 @@ class AccountState:
         self._instr_day_trades.clear()
         self._total_daily_losses = 0
         self._daily_stopped = False
-        logger.info("[%s] New day. Equity=%.2f, State=%s",
-                    self.name, equity, self.state)
+        logger.info("[%s] New day. Equity=%.2f, State=%s, TradingDays=%d",
+                    self.name, equity, self.state, self.trading_days)
 
     def can_trade(self, combo_name: str, instrument: str) -> tuple[bool, str]:
         """Check if a trade is allowed given portfolio controls."""
@@ -127,7 +131,6 @@ class AccountState:
         """Record that a trade was opened."""
         self._instr_day_trades[instrument] += 1
         self.total_trades += 1
-        self.trading_days = max(self.trading_days, 1)  # at least 1 day
         logger.info("[%s] Trade opened: %s (%s). Instr trades today: %d",
                     self.name, combo_name, instrument,
                     self._instr_day_trades[instrument])

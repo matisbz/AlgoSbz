@@ -1,0 +1,909 @@
+"""
+AlgoSbz Live Trader — FTMO exam factory + funded account manager.
+
+CRITICAL: This must replicate the backtest engine EXACTLY.
+Backtest flow per bar:
+  1. Process SL/TP on open positions (broker checks bar highs/lows)
+  2. Execute PENDING signal at THIS bar's open (from previous bar)
+     - Gap adjustment: shift SL/TP by (bar_open - ref_price)
+     - Anti-martingale multiplier applied
+     - RiskManager.evaluate_signal for sizing + DD checks
+  3. Generate signal on THIS bar (stored as pending for NEXT bar)
+  4. has_position checked per combo (no duplicate entries)
+
+Live adaptation:
+  - "pending signal" = signal generated on last COMPLETED bar,
+    executed when NEXT bar opens (= current forming bar's open)
+  - Each account has its own RiskManager + EquityManager
+  - MT5 limitation: rotate logins
+
+Usage:
+    python -X utf8 scripts/live_trader.py
+    python -X utf8 scripts/live_trader.py --dry-run
+"""
+import sys
+import time
+import json
+import logging
+import argparse
+import importlib
+from pathlib import Path
+from datetime import datetime, timedelta
+from collections import defaultdict
+from copy import deepcopy
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import yaml
+import pandas as pd
+
+from algosbz.core.config import load_config, load_all_instruments, InstrumentConfig
+from algosbz.core.enums import SignalAction, Direction
+from algosbz.core.models import Signal
+from algosbz.risk.manager import RiskManager
+from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
+
+from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
+
+# ─── Configuration ──────────────────────────────────────────────
+
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "accounts.yaml"
+STATE_PATH = Path(__file__).resolve().parent.parent / "data" / "live_state.json"
+LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "live_trades.log"
+
+POLL_INTERVAL = 30  # seconds between bar checks
+HISTORY_BARS = 500  # bars of history for strategy setup
+
+# Ensure data directory exists before setting up logging
+LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+from logging.handlers import RotatingFileHandler
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(LOG_PATH, maxBytes=10_000_000, backupCount=5,
+                           encoding="utf-8"),
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+# ─── Strategy Manager ───────────────────────────────────────────
+
+class StrategyManager:
+    """
+    Manages strategies and replicates backtest signal flow.
+
+    Key backtest behaviors replicated:
+    1. setup() called ONCE on initial history (not on every new bar)
+    2. Signal generated on COMPLETED bar → stored as pending
+    3. Pending signal executed on NEXT bar's open
+    4. has_position tracked per combo
+    """
+
+    def __init__(self, deck: list[str], symbol_map: dict):
+        self.deck = deck
+        self.symbol_map = symbol_map
+        self.strategies = {}       # combo → strategy instance
+        self.timeframes = {}       # combo → "H4"/"H1"/etc
+        self.symbols = {}          # combo → internal symbol
+        self.bar_data = {}         # (symbol, tf) → DataFrame
+        self.last_bar_time = {}    # (symbol, tf) → last processed bar timestamp
+        self.pending_signals = {}  # combo → Signal (waiting for next bar)
+        self.last_signal_bar = {}  # combo → timestamp of bar that generated signal
+        self._setup_done = set()   # combos that have been setup
+
+    def load_strategies(self):
+        for combo_name in self.deck:
+            entry = ALL_COMBOS[combo_name]
+            info = STRAT_REGISTRY[entry["strat"]]
+            mod = importlib.import_module(info["module"])
+            cls = getattr(mod, info["class"])
+            self.strategies[combo_name] = cls(entry["params"])
+            self.timeframes[combo_name] = self.strategies[combo_name].required_timeframe()
+            self.symbols[combo_name] = entry["symbol"]
+        logger.info("Loaded %d strategies", len(self.strategies))
+
+    def get_required_feeds(self) -> list[tuple[str, str]]:
+        feeds = set()
+        for combo in self.deck:
+            feeds.add((self.symbols[combo], self.timeframes[combo]))
+        return list(feeds)
+
+    def setup_with_history(self, mt5_conn):
+        """Download history and run setup() ONCE per strategy (like backtest)."""
+        for sym, tf in self.get_required_feeds():
+            logger.info("Fetching %d bars of %s %s...", HISTORY_BARS, sym, tf)
+            df = mt5_conn.get_bars(sym, tf, HISTORY_BARS)
+            if df.empty:
+                logger.error("No data for %s %s", sym, tf)
+                continue
+            self.bar_data[(sym, tf)] = df
+            self.last_bar_time[(sym, tf)] = df.index[-1]
+            logger.info("  %s %s: %d bars, last=%s", sym, tf, len(df), df.index[-1])
+
+        # Setup each strategy ONCE on full history (matches backtest)
+        for combo in self.deck:
+            key = (self.symbols[combo], self.timeframes[combo])
+            if key not in self.bar_data:
+                continue
+            self.strategies[combo].setup(self.bar_data[key])
+            self._setup_done.add(combo)
+            logger.info("  %s setup OK (%d bars)", combo, len(self.bar_data[key]))
+
+    def check_new_bars(self, mt5_conn) -> dict[tuple[str, str], pd.DataFrame]:
+        """
+        Check for new completed bars. Returns {(sym,tf): new_bar_df} for feeds
+        that have a new bar since last check.
+        """
+        new_feeds = {}
+        for sym, tf in self.get_required_feeds():
+            key = (sym, tf)
+            if key not in self.bar_data:
+                continue
+
+            recent = mt5_conn.get_bars(sym, tf, 5)
+            if recent.empty:
+                continue
+
+            last_new = recent.index[-1]
+            last_known = self.last_bar_time.get(key)
+
+            if last_known is not None and last_new <= last_known:
+                continue
+
+            # Append only truly new bars
+            old_df = self.bar_data[key]
+            new_only = recent[recent.index > old_df.index[-1]]
+            if new_only.empty:
+                continue
+
+            self.bar_data[key] = pd.concat([old_df, new_only]).tail(HISTORY_BARS)
+            self.last_bar_time[key] = self.bar_data[key].index[-1]
+            new_feeds[key] = new_only
+
+            logger.info("NEW BAR: %s %s @ %s (%d new bars)",
+                        sym, tf, self.last_bar_time[key], len(new_only))
+
+        return new_feeds
+
+    def generate_signals(self, new_feeds: dict,
+                         has_position_fn) -> dict[str, Signal]:
+        """
+        Generate signals on newly completed bars.
+
+        Replicates backtest: strategy.on_bar(idx, bar, has_position)
+        on the LAST COMPLETED bar (second to last in buffer, since last
+        may still be forming).
+
+        has_position_fn(combo_name) → bool: checks if combo has open position.
+        """
+        signals = {}
+        for combo in self.deck:
+            if combo not in self._setup_done:
+                continue
+
+            key = (self.symbols[combo], self.timeframes[combo])
+            if key not in new_feeds:
+                continue
+
+            df = self.bar_data[key]
+            strategy = self.strategies[combo]
+
+            # Re-setup with extended data (backtest does setup once on full data,
+            # but indicators need to cover new bars too)
+            strategy.setup(df)
+
+            # Signal on LAST COMPLETED bar = second to last
+            # (last bar may still be forming in live)
+            idx = len(df) - 2
+            if idx < 0:
+                continue
+
+            bar = df.iloc[idx]
+            bar_time = df.index[idx]
+
+            # Skip if we already generated a signal for this bar
+            if self.last_signal_bar.get(combo) == bar_time:
+                continue
+
+            # has_position per combo (matches backtest: broker.has_position)
+            has_pos = has_position_fn(combo)
+
+            signal = strategy.on_bar(idx, bar, has_pos)
+            self.last_signal_bar[combo] = bar_time
+
+            if signal.action in (SignalAction.ENTER_LONG, SignalAction.ENTER_SHORT):
+                if not has_pos:  # backtest only enters if no position
+                    self.pending_signals[combo] = signal
+                    logger.info("PENDING SIGNAL: %s → %s SL=%.5f TP=%s (bar=%s)",
+                                combo, signal.action.name,
+                                signal.stop_loss or 0,
+                                f"{signal.take_profit:.5f}" if signal.take_profit else "None",
+                                bar_time)
+
+        return signals
+
+    def get_executable_signals(self, mt5_conn) -> dict[str, tuple[Signal, float]]:
+        """
+        Get pending signals ready for execution at current bar's open.
+
+        Returns {combo: (gap_adjusted_signal, fill_price)}.
+
+        This is the "execute pending at next bar's open" step from backtest.
+        """
+        executable = {}
+
+        for combo, signal in list(self.pending_signals.items()):
+            sym = self.symbols[combo]
+            tf = self.timeframes[combo]
+            key = (sym, tf)
+
+            if key not in self.bar_data:
+                continue
+
+            # Current bar's open = execution price (matches backtest)
+            df = self.bar_data[key]
+            current_bar = df.iloc[-1]  # the forming bar
+            fill_price = current_bar["open"]
+
+            # Gap adjustment: shift SL/TP by (fill_price - ref_price)
+            # This preserves ATR-based distances despite overnight gaps
+            ref_price = signal.metadata.get("ref_price")
+            adjusted_signal = signal
+            if ref_price is not None and signal.stop_loss is not None:
+                gap = fill_price - ref_price
+                adjusted_sl = signal.stop_loss + gap
+                adjusted_tp = (signal.take_profit + gap) if signal.take_profit else None
+                adjusted_signal = Signal(
+                    action=signal.action,
+                    symbol=signal.symbol,
+                    timestamp=signal.timestamp,
+                    stop_loss=adjusted_sl,
+                    take_profit=adjusted_tp,
+                    metadata=signal.metadata,
+                )
+
+            executable[combo] = (adjusted_signal, fill_price)
+
+        # DON'T clear here — signals are cleared per-combo after successful
+        # execution or explicit rejection. This prevents signal loss on
+        # market-closed / MT5 disconnect / transient failures.
+        return executable
+
+    def confirm_signal_consumed(self, combo: str):
+        """Mark a pending signal as consumed (executed or rejected by risk checks)."""
+        self.pending_signals.pop(combo, None)
+
+    def discard_stale_signals(self):
+        """Remove pending signals that are more than 1 bar old (expired)."""
+        stale = []
+        for combo, signal in self.pending_signals.items():
+            key = (self.symbols[combo], self.timeframes[combo])
+            if key in self.bar_data:
+                df = self.bar_data[key]
+                if len(df) >= 2:
+                    # Signal should execute on the bar after it was generated.
+                    # If we're already past that, it's stale.
+                    signal_bar = self.last_signal_bar.get(combo)
+                    if signal_bar is not None and signal_bar < df.index[-2]:
+                        stale.append(combo)
+        for combo in stale:
+            logger.warning("STALE signal discarded: %s (missed execution window)", combo)
+            self.pending_signals.pop(combo, None)
+
+
+# ─── Live Account (with RiskManager + EquityManager) ────────────
+
+class LiveAccount:
+    """
+    Wraps AccountState with RiskManager + EquityManager to match backtest.
+
+    Each account has its own:
+    - RiskManager: position sizing, DD checks, max positions
+    - EquityManager: anti-martingale tiers, progressive ramp, win streak
+    - Open position tracking per combo
+    """
+
+    def __init__(self, name: str, config: dict, mode_configs: dict,
+                 app_config, instruments: dict):
+        from algosbz.live.account_manager import AccountState
+        self.state = AccountState(name, config, mode_configs)
+        self.app_config = app_config
+        self.instruments = instruments
+
+        # Per-account RiskManagers (one per instrument, like backtest)
+        self._risk_managers = {}  # symbol → RiskManager
+        self._equity_manager = EquityManager(EquityManagerConfig())
+        self._equity_manager.initialize(self.state.initial_balance)
+        self._base_risk = self.state.risk_per_trade
+
+        # Position tracking per combo (matches backtest broker.has_position)
+        self.open_positions = {}  # combo → MT5 ticket (or "dry_run")
+
+    def _get_risk_manager(self, symbol: str) -> RiskManager:
+        """Get or create RiskManager for a symbol."""
+        if symbol not in self._risk_managers:
+            risk_cfg = deepcopy(self.app_config.risk)
+            risk_cfg.risk_per_trade = self.state.risk_per_trade
+            risk_cfg.daily_dd_limit = 0.045  # 4.5% safety
+            risk_cfg.max_dd_limit = 0.09     # 9% safety
+            rm = RiskManager(risk_cfg, self.instruments[symbol])
+            rm.initialize(self.state.initial_balance)
+            rm.current_equity = self.state.current_equity
+            rm.start_of_day_equity = self.state._day_start_equity
+            self._risk_managers[symbol] = rm
+        return self._risk_managers[symbol]
+
+    def has_position(self, combo: str) -> bool:
+        return combo in self.open_positions
+
+    def evaluate_signal(self, combo: str, signal: Signal,
+                        fill_price: float) -> dict | None:
+        """
+        Evaluate signal through RiskManager + EquityManager.
+        Returns order dict or None if rejected.
+        Matches backtest engine lines 112-144.
+        """
+        # Portfolio controls first
+        symbol = ALL_COMBOS[combo]["symbol"]
+        can, reason = self.state.can_trade(combo, symbol)
+        if not can:
+            logger.debug("[%s] SKIP %s: %s", self.state.name, combo, reason)
+            return None
+
+        # Already has position for this combo (matches backtest: !broker.has_position)
+        if self.has_position(combo):
+            logger.debug("[%s] SKIP %s: already has position", self.state.name, combo)
+            return None
+
+        # Anti-martingale multiplier (matches backtest engine line 114)
+        multiplier = self._equity_manager.get_risk_multiplier()
+        if multiplier <= 0 or self._equity_manager.should_stop_trading():
+            logger.debug("[%s] SKIP %s: equity manager halt (mult=%.2f)",
+                        self.state.name, combo, multiplier)
+            return None
+
+        # RiskManager evaluate_signal (matches backtest engine lines 134-137)
+        rm = self._get_risk_manager(symbol)
+        rm.current_equity = self.state.current_equity
+        rm.start_of_day_equity = self.state._day_start_equity
+
+        # Apply multiplier to risk (matches backtest: risk *= multiplier)
+        base_risk = self.state.risk_per_trade
+        rm.config.risk_per_trade = base_risk * multiplier
+        order = rm.evaluate_signal(signal, self.state.current_equity, fill_price)
+        rm.config.risk_per_trade = base_risk  # restore
+
+        if order is None:
+            logger.debug("[%s] SKIP %s: RiskManager rejected", self.state.name, combo)
+            return None
+
+        direction = "BUY" if order.direction == Direction.LONG else "SELL"
+
+        logger.info("[%s] APPROVED: %s %s %.2f lots @ %.5f SL=%.5f TP=%s (mult=%.2f)",
+                    self.state.name, direction, combo, order.volume, fill_price,
+                    order.stop_loss,
+                    f"{order.take_profit:.5f}" if order.take_profit else "None",
+                    multiplier)
+
+        return {
+            "account": self,
+            "combo": combo,
+            "direction": direction,
+            "symbol": self.state.mode_configs.get("symbol_map", {}).get(symbol, symbol),
+            "internal_symbol": symbol,
+            "volume": order.volume,
+            "sl": order.stop_loss,
+            "tp": order.take_profit,
+            "comment": f"AS_{combo}_{self.state.state}",
+            "fill_price": fill_price,
+        }
+
+    def on_trade_executed(self, combo: str, ticket):
+        """After MT5 confirms fill."""
+        symbol = ALL_COMBOS[combo]["symbol"]
+        self.open_positions[combo] = ticket
+        self.state.on_trade_opened(combo, symbol)
+
+        rm = self._get_risk_manager(symbol)
+        rm.on_trade_opened()
+
+    def on_trade_closed(self, combo: str, pnl: float):
+        """When SL/TP hit (detected by polling MT5 positions)."""
+        self.open_positions.pop(combo, None)
+        self.state.on_trade_closed(combo, pnl)
+
+        # Update EquityManager (matches backtest: eq_mgr.on_trade_closed)
+        self._equity_manager.on_trade_closed(pnl, self.state.current_equity)
+
+        # Update RiskManager tracking (position count, trading days)
+        # Do NOT call rm.on_trade_closed() — it would double-count PnL in equity.
+        # rm.current_equity is synced externally in evaluate_signal() before each use.
+        symbol = ALL_COMBOS[combo]["symbol"]
+        rm = self._get_risk_manager(symbol)
+        rm.open_position_count = max(0, rm.open_position_count - 1)
+        rm.daily_pnl += pnl
+        rm._trading_days.add(datetime.now().date())
+        rm.current_equity = self.state.current_equity
+        rm.start_of_day_equity = self.state._day_start_equity
+        if rm.current_equity > rm.high_water_mark:
+            rm.high_water_mark = rm.current_equity
+
+    def sync_equity(self, equity: float):
+        """Sync from MT5 account info."""
+        self.state.current_equity = equity
+
+    def new_day(self, equity: float):
+        """Daily reset for all managers."""
+        self.state.new_day(equity)
+        self._equity_manager.on_bar(datetime.now())
+        for rm in self._risk_managers.values():
+            rm.update_on_bar(datetime.now(), 0.0)
+
+
+# ─── State Persistence ──────────────────────────────────────────
+
+def save_state(accounts: list[LiveAccount], day_date: str,
+               strat_mgr: 'StrategyManager' = None):
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    state = {
+        "day_date": day_date,
+        "last_update": datetime.now().isoformat(),
+        "accounts": {},
+    }
+    for acct in accounts:
+        s = acct.state
+        # Save open positions with their MT5 tickets for restore
+        positions = {}
+        for combo, ticket in acct.open_positions.items():
+            positions[combo] = ticket if isinstance(ticket, int) else str(ticket)
+        state["accounts"][s.name] = {
+            "state": s.state,
+            "equity": s.current_equity,
+            "trading_days": s.trading_days,
+            "total_trades": s.total_trades,
+            "total_pnl": s.total_pnl,
+            "open_positions": positions,
+        }
+
+    # Persist pending signals (so they survive restart)
+    if strat_mgr and strat_mgr.pending_signals:
+        pending = {}
+        for combo, signal in strat_mgr.pending_signals.items():
+            pending[combo] = {
+                "action": signal.action.name,
+                "stop_loss": signal.stop_loss,
+                "take_profit": signal.take_profit,
+                "metadata": signal.metadata,
+            }
+        state["pending_signals"] = pending
+
+    with open(STATE_PATH, "w") as f:
+        json.dump(state, f, indent=2, default=str)
+
+
+def load_state(accounts: list[LiveAccount]) -> dict:
+    """
+    Restore state from previous session. Returns pending_signals dict (raw).
+    Must be called AFTER accounts are created but BEFORE main loop.
+    """
+    if not STATE_PATH.exists():
+        return {}
+
+    try:
+        with open(STATE_PATH, "r") as f:
+            state = json.load(f)
+    except (json.JSONDecodeError, IOError):
+        logger.warning("Could not load state file, starting fresh")
+        return {}
+
+    logger.info("Restoring state from %s", state.get("last_update", "unknown"))
+
+    for acct in accounts:
+        name = acct.state.name
+        if name not in state.get("accounts", {}):
+            continue
+        saved = state["accounts"][name]
+
+        # Restore open positions (will be validated against MT5 on first sync)
+        if "open_positions" in saved and isinstance(saved["open_positions"], dict):
+            for combo, ticket in saved["open_positions"].items():
+                if isinstance(ticket, int) or (isinstance(ticket, str) and ticket.isdigit()):
+                    acct.open_positions[combo] = int(ticket)
+                elif ticket == "dry_run":
+                    acct.open_positions[combo] = "dry_run"
+            logger.info("[%s] Restored %d open positions: %s",
+                        name, len(acct.open_positions),
+                        list(acct.open_positions.keys()))
+
+        # Restore cumulative counters
+        acct.state.trading_days = saved.get("trading_days", 0)
+        acct.state.total_trades = saved.get("total_trades", 0)
+        acct.state.total_pnl = saved.get("total_pnl", 0.0)
+        acct.state.state = saved.get("state", acct.state.state)
+
+    return state.get("pending_signals", {})
+
+
+def save_trade_log(trade_info: dict):
+    log_file = LOG_PATH.parent / "trade_history.jsonl"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps({**trade_info, "ts": datetime.now().isoformat()}) + "\n")
+
+
+# ─── Position Sync ──────────────────────────────────────────────
+
+def get_deal_pnl(ticket: int) -> float:
+    """
+    Query MT5 deal history for the PnL of a closed position.
+    Must be called while logged into the correct account.
+    """
+    import MetaTrader5 as mt5
+    from datetime import timezone
+
+    # Search deals in last 60 days for this position (covers long offline periods)
+    now = datetime.now(timezone.utc)
+    deals = mt5.history_deals_get(now - timedelta(days=60), now)
+    if deals is None:
+        return 0.0
+
+    total_pnl = 0.0
+    for deal in deals:
+        if deal.position_id == ticket and deal.entry == 1:  # entry=1 means exit deal
+            total_pnl += deal.profit + deal.commission + deal.swap
+    return total_pnl
+
+
+def sync_closed_positions_for_account(acct: LiveAccount, mt5_conn) -> list[str]:
+    """
+    Check which positions have been closed for ONE account.
+    Must be logged into this account's MT5 session.
+    Returns list of closed combo names.
+    """
+    if not acct.open_positions:
+        return []
+
+    current_mt5_positions = mt5_conn.get_open_positions()
+    current_tickets = {p["ticket"] for p in current_mt5_positions}
+
+    closed_combos = []
+    for combo, ticket in list(acct.open_positions.items()):
+        if ticket == "dry_run":
+            continue
+        if ticket not in current_tickets:
+            # Position closed — get real PnL from deal history
+            pnl = get_deal_pnl(ticket)
+            acct.on_trade_closed(combo, pnl)
+            closed_combos.append(combo)
+            logger.info("[%s] Position closed: %s ticket=%d PnL=%.2f",
+                        acct.state.name, combo, ticket, pnl)
+
+            save_trade_log({
+                "account": acct.state.name,
+                "combo": combo,
+                "direction": "CLOSE",
+                "pnl": pnl,
+                "ticket": ticket,
+                "state": acct.state.state,
+            })
+
+    return closed_combos
+
+
+# ─── Main Loop ──────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="AlgoSbz Live Trader")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Generate signals but don't place real orders")
+    parser.add_argument("--once", action="store_true",
+                        help="Run one cycle and exit (for testing)")
+    args = parser.parse_args()
+
+    # Load configs
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+
+    symbol_map = cfg.get("symbol_map", {})
+    deck = cfg["deck"]
+    app_config = load_config()
+    instruments = load_all_instruments()
+
+    logger.info("=" * 80)
+    logger.info("  AlgoSbz Live Trader %s", "DRY RUN" if args.dry_run else "LIVE")
+    logger.info("  Deck: %d combos", len(deck))
+    logger.info("  Backtest-faithful: pending signals, gap adjustment,")
+    logger.info("    anti-martingale, RiskManager sizing, has_position tracking")
+    logger.info("=" * 80)
+
+    # Initialize strategies
+    strat_mgr = StrategyManager(deck, symbol_map)
+    strat_mgr.load_strategies()
+
+    # Initialize accounts with RiskManager + EquityManager
+    mode_configs = {
+        "exam_mode": cfg["exam_mode"],
+        "funded_mode": cfg["funded_mode"],
+        "symbol_map": symbol_map,
+    }
+    accounts: list[LiveAccount] = []
+    for acct_cfg in cfg["accounts"]:
+        if acct_cfg.get("enabled", True) and acct_cfg["login"] != 0:
+            accounts.append(LiveAccount(
+                acct_cfg["name"], acct_cfg, mode_configs,
+                app_config, instruments,
+            ))
+
+    if not accounts:
+        logger.error("No enabled accounts. Fill in config/accounts.yaml")
+        return
+
+    logger.info("Accounts: %d", len(accounts))
+
+    # Restore state from previous session (open positions, counters)
+    saved_pending = load_state(accounts)
+
+    # ─── Initial setup ───────────────────────────────────────────
+    from algosbz.live.mt5_connector import MT5Connector
+
+    # Connect to first account for data download
+    first = accounts[0]
+    conn = MT5Connector(first.state.login, first.state.password,
+                        first.state.server, symbol_map)
+
+    logger.info("Connecting to %s for initial data...", first.state.name)
+    if not conn.connect():
+        logger.error("MT5 connection failed. Is the terminal running?")
+        return
+
+    # Download history and setup strategies (setup called ONCE)
+    strat_mgr.setup_with_history(conn)
+
+    # Sync equity for first account
+    info = conn.get_account_info()
+    if info:
+        first.new_day(info["equity"])
+        logger.info("[%s] Equity: %.2f", first.state.name, info["equity"])
+    conn.disconnect()
+
+    # Sync remaining accounts
+    for acct in accounts[1:]:
+        conn = MT5Connector(acct.state.login, acct.state.password,
+                           acct.state.server, symbol_map)
+        if conn.connect():
+            info = conn.get_account_info()
+            if info:
+                acct.new_day(info["equity"])
+                logger.info("[%s] Equity: %.2f", acct.state.name, info["equity"])
+            conn.disconnect()
+
+    for acct in accounts:
+        logger.info("  %s", acct.state.status_line())
+
+    # ─── Main trading loop ───────────────────────────────────────
+    logger.info("\nTrading loop started (poll=%ds)\n", POLL_INTERVAL)
+
+    cycle = 0
+    last_day = datetime.now().date()
+
+    while True:
+        cycle += 1
+        try:
+            # Daily reset — sync equity from MT5 FIRST for all accounts
+            today = datetime.now().date()
+            if today != last_day:
+                last_day = today
+                logger.info("=== NEW DAY: %s ===", today)
+                if not args.dry_run:
+                    for acct in accounts:
+                        conn = MT5Connector(acct.state.login, acct.state.password,
+                                           acct.state.server, symbol_map)
+                        if conn.connect():
+                            info = conn.get_account_info()
+                            if info:
+                                acct.new_day(info["equity"])
+                                logger.info("[%s] New day equity synced: %.2f",
+                                            acct.state.name, info["equity"])
+                            conn.disconnect()
+                        else:
+                            acct.new_day(acct.state.current_equity)
+                else:
+                    for acct in accounts:
+                        acct.new_day(acct.state.current_equity)
+
+            # Step 1: Sync closed positions per account (rotate logins)
+            # Each account needs its own MT5 session to see its positions
+            if not args.dry_run:
+                for acct in accounts:
+                    if not acct.open_positions:
+                        continue  # no open positions to check
+                    conn = MT5Connector(acct.state.login, acct.state.password,
+                                       acct.state.server, symbol_map)
+                    if conn.connect():
+                        sync_closed_positions_for_account(acct, conn)
+                        # Also sync equity while connected
+                        info = conn.get_account_info()
+                        if info:
+                            acct.sync_equity(info["equity"])
+                        conn.disconnect()
+
+            # Connect to first account for market data
+            conn = MT5Connector(accounts[0].state.login,
+                               accounts[0].state.password,
+                               accounts[0].state.server, symbol_map)
+
+            if not conn.connect():
+                logger.warning("Connection failed, retry in %ds", POLL_INTERVAL)
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Step 2: Check for new bars
+            new_feeds = strat_mgr.check_new_bars(conn)
+
+            if not new_feeds:
+                conn.disconnect()
+                if cycle % 20 == 0:
+                    logger.info("Cycle %d — no new bars", cycle)
+                if args.once:
+                    break
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Step 3: Get executable pending signals (from PREVIOUS cycle)
+            # This is the "execute pending at next bar open" from backtest
+            executable = strat_mgr.get_executable_signals(conn)
+
+            # Step 4: Generate NEW signals on completed bars (stored as pending)
+            # These will execute on the NEXT new bar (next cycle)
+            # NOTE: has_position=False here so signals are always generated.
+            # Per-account position check happens in evaluate_signal() (Step 5).
+            # This is correct for multi-account: account1 may have a position
+            # but account2 should still be able to take the signal.
+            strat_mgr.generate_signals(new_feeds, lambda combo: False)
+
+            conn.disconnect()
+
+            # Step 5: Execute pending signals that are now ready
+            if not executable:
+                if args.once:
+                    break
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            logger.info("Cycle %d — %d executable signals: %s",
+                        cycle, len(executable), list(executable.keys()))
+
+            # Evaluate each signal against each account
+            exec_queue = []
+            rejected_combos = set()
+            for combo, (signal, fill_price) in executable.items():
+                combo_has_order = False
+                for acct in accounts:
+                    order = acct.evaluate_signal(combo, signal, fill_price)
+                    if order:
+                        exec_queue.append(order)
+                        combo_has_order = True
+                if not combo_has_order:
+                    # All accounts rejected → signal consumed (risk checks, not failure)
+                    rejected_combos.add(combo)
+
+            # Mark rejected signals as consumed (they won't retry)
+            for combo in rejected_combos:
+                strat_mgr.confirm_signal_consumed(combo)
+
+            if not exec_queue:
+                logger.info("No orders passed all checks.")
+                # Clean up stale signals
+                strat_mgr.discard_stale_signals()
+                if args.once:
+                    break
+                time.sleep(POLL_INTERVAL)
+                continue
+
+            # Step 6: Execute via MT5
+            executed_combos = set()
+            if args.dry_run:
+                for order in exec_queue:
+                    acct = order["account"]
+                    logger.info("[DRY RUN] %s %s %s %.2f lots SL=%.5f TP=%s",
+                                acct.state.name, order["direction"],
+                                order["combo"], order["volume"],
+                                order["sl"],
+                                f"{order['tp']:.5f}" if order["tp"] else "None")
+                    acct.on_trade_executed(order["combo"], "dry_run")
+                    executed_combos.add(order["combo"])
+            else:
+                # Group by account, execute with rotation
+                by_account = defaultdict(list)
+                for order in exec_queue:
+                    by_account[order["account"].state.name].append(order)
+
+                for acct_name, orders in by_account.items():
+                    acct = next(a for a in accounts if a.state.name == acct_name)
+                    conn = MT5Connector(acct.state.login, acct.state.password,
+                                       acct.state.server, symbol_map)
+
+                    if not conn.connect():
+                        logger.error("[%s] Connection failed for execution", acct_name)
+                        continue
+
+                    for order in orders:
+                        result = conn.place_market_order(
+                            symbol=order["internal_symbol"],
+                            direction=order["direction"],
+                            volume=order["volume"],
+                            sl=order["sl"],
+                            tp=order["tp"],
+                            comment=order["comment"],
+                        )
+
+                        if result:
+                            acct.on_trade_executed(order["combo"], result["ticket"])
+                            executed_combos.add(order["combo"])
+                            save_trade_log({
+                                "account": acct_name,
+                                "combo": order["combo"],
+                                "direction": order["direction"],
+                                "symbol": order["symbol"],
+                                "volume": order["volume"],
+                                "sl": order["sl"],
+                                "tp": order["tp"],
+                                "fill_price": result["price"],
+                                "ticket": result["ticket"],
+                                "state": acct.state.state,
+                            })
+
+                    # Sync equity after execution
+                    info = conn.get_account_info()
+                    if info:
+                        acct.sync_equity(info["equity"])
+
+                    conn.disconnect()
+
+            # Confirm executed signals as consumed (failed ones stay pending for retry)
+            for combo in executed_combos:
+                strat_mgr.confirm_signal_consumed(combo)
+            # Clean up stale signals (missed their execution window)
+            strat_mgr.discard_stale_signals()
+
+            # Save state + check transitions
+            save_state(accounts, str(today), strat_mgr)
+
+            for acct in accounts:
+                transition = acct.state.check_phase_transition()
+                if transition:
+                    logger.info(">>> [%s] PHASE TRANSITION → %s <<<",
+                                acct.state.name, transition)
+                    from algosbz.live.account_manager import save_account_states
+                    save_account_states(str(CONFIG_PATH),
+                                       [a.state for a in accounts])
+                    # Reset risk/equity managers for new phase
+                    acct._equity_manager.initialize(acct.state.initial_balance)
+                    acct._risk_managers.clear()
+                    acct._base_risk = acct.state.risk_per_trade
+
+            for acct in accounts:
+                logger.info("  %s", acct.state.status_line())
+
+        except KeyboardInterrupt:
+            logger.info("\nShutting down...")
+            save_state(accounts, str(datetime.now().date()), strat_mgr)
+            break
+        except Exception as e:
+            logger.error("Error: %s", e, exc_info=True)
+            time.sleep(POLL_INTERVAL)
+
+        if args.once:
+            break
+        time.sleep(POLL_INTERVAL)
+
+    logger.info("Live trader stopped.")
+
+
+if __name__ == "__main__":
+    main()

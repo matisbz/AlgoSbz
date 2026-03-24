@@ -196,8 +196,9 @@ class RiskManager:
             return
 
         # Daily drawdown check (temporary halt — resets next day)
+        # FTMO daily DD = (start_of_day_equity - equity) / initial_balance
         if not self._daily_halted:
-            daily_dd = (self.start_of_day_equity - equity) / self.start_of_day_equity
+            daily_dd = (self.start_of_day_equity - equity) / self.initial_balance
             if daily_dd >= self.config.daily_dd_limit:
                 self._halted = True
                 self._daily_halted = True
@@ -206,9 +207,9 @@ class RiskManager:
                 return
 
     def daily_drawdown_pct(self) -> float:
-        if self.start_of_day_equity <= 0:
+        if self.initial_balance <= 0:
             return 0.0
-        return (self.start_of_day_equity - self.current_equity) / self.start_of_day_equity
+        return (self.start_of_day_equity - self.current_equity) / self.initial_balance
 
     def overall_drawdown_pct(self) -> float:
         if self.initial_balance <= 0:

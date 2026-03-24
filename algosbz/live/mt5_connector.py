@@ -115,68 +115,101 @@ class MT5Connector:
 
     # ─── Order execution ────────────────────────────────────────
 
+    def _get_filling_mode(self, mt5_symbol: str) -> int:
+        """Query broker for supported filling mode."""
+        info = mt5.symbol_info(mt5_symbol)
+        if info is None:
+            return mt5.ORDER_FILLING_IOC  # fallback
+
+        # filling_mode is a bitmask: bit0=FOK, bit1=IOC, bit2=RETURN
+        fm = info.filling_mode
+        if fm & 2:  # IOC supported (preferred for market orders)
+            return mt5.ORDER_FILLING_IOC
+        if fm & 1:  # FOK supported
+            return mt5.ORDER_FILLING_FOK
+        return mt5.ORDER_FILLING_RETURN  # fallback
+
+    def _get_digits(self, mt5_symbol: str) -> int:
+        """Get price decimal digits for proper rounding."""
+        info = mt5.symbol_info(mt5_symbol)
+        return info.digits if info else 5
+
     def place_market_order(self, symbol: str, direction: str,
                            volume: float, sl: float, tp: Optional[float],
-                           comment: str = "") -> Optional[dict]:
+                           comment: str = "",
+                           max_retries: int = 3) -> Optional[dict]:
         """
         Place a market order with SL/TP.
 
-        Args:
-            symbol: Internal symbol name (mapped to broker's name)
-            direction: "BUY" or "SELL"
-            volume: Lot size
-            sl: Stop loss price
-            tp: Take profit price (or None)
-            comment: Order comment for tracking
+        Retries on transient errors (requote, price changed).
+        Uses broker's supported filling mode and correct price digits.
         """
         mt5_symbol = self.map_symbol(symbol)
+        digits = self._get_digits(mt5_symbol)
+        filling = self._get_filling_mode(mt5_symbol)
 
-        # Get current price
-        tick = mt5.symbol_info_tick(mt5_symbol)
-        if tick is None:
-            logger.error("No tick for %s", mt5_symbol)
-            return None
-
-        if direction == "BUY":
-            order_type = mt5.ORDER_TYPE_BUY
-            price = tick.ask
-        else:
-            order_type = mt5.ORDER_TYPE_SELL
-            price = tick.bid
-
-        request = {
-            "action": mt5.TRADE_ACTION_DEAL,
-            "symbol": mt5_symbol,
-            "volume": volume,
-            "type": order_type,
-            "price": price,
-            "sl": round(sl, 5),
-            "deviation": 20,  # max slippage in points
-            "magic": 20250323,  # magic number to identify our trades
-            "comment": comment,
-            "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+        # Transient retcodes worth retrying
+        retryable = {
+            mt5.TRADE_RETCODE_REQUOTE,
+            mt5.TRADE_RETCODE_PRICE_CHANGED,
+            mt5.TRADE_RETCODE_PRICE_OFF,
         }
-        if tp is not None:
-            request["tp"] = round(tp, 5)
 
-        result = mt5.order_send(request)
-        if result is None:
-            logger.error("order_send returned None for %s", mt5_symbol)
-            return None
+        for attempt in range(max_retries):
+            # Get fresh tick on each attempt
+            tick = mt5.symbol_info_tick(mt5_symbol)
+            if tick is None:
+                logger.error("No tick for %s", mt5_symbol)
+                return None
 
-        if result.retcode != mt5.TRADE_RETCODE_DONE:
+            if direction == "BUY":
+                order_type = mt5.ORDER_TYPE_BUY
+                price = tick.ask
+            else:
+                order_type = mt5.ORDER_TYPE_SELL
+                price = tick.bid
+
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": mt5_symbol,
+                "volume": volume,
+                "type": order_type,
+                "price": price,
+                "sl": round(sl, digits),
+                "deviation": 20,  # max slippage in points
+                "magic": 20250323,
+                "comment": comment,
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": filling,
+            }
+            if tp is not None:
+                request["tp"] = round(tp, digits)
+
+            result = mt5.order_send(request)
+            if result is None:
+                logger.error("order_send returned None for %s", mt5_symbol)
+                return None
+
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
+                logger.info("ORDER FILLED: %s %s %.2f lots @ %.5f SL=%.5f TP=%s [%s]",
+                             direction, mt5_symbol, volume, result.price,
+                             sl, tp, comment)
+                return {
+                    "ticket": result.order,
+                    "price": result.price,
+                    "volume": result.volume,
+                }
+
+            if result.retcode in retryable and attempt < max_retries - 1:
+                logger.warning("Retryable error for %s: %s (code %d), attempt %d/%d",
+                               mt5_symbol, result.comment, result.retcode,
+                               attempt + 1, max_retries)
+                continue
+
             logger.error("Order failed: %s (code %d)", result.comment, result.retcode)
             return None
 
-        logger.info("ORDER FILLED: %s %s %.2f lots @ %.5f SL=%.5f TP=%s [%s]",
-                     direction, mt5_symbol, volume, result.price,
-                     sl, tp, comment)
-        return {
-            "ticket": result.order,
-            "price": result.price,
-            "volume": result.volume,
-        }
+        return None
 
     def get_open_positions(self, magic: int = 20250323) -> list[dict]:
         """Get all open positions placed by us (filtered by magic number)."""
@@ -230,7 +263,7 @@ class MT5Connector:
             "magic": 20250323,
             "comment": "close",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": mt5.ORDER_FILLING_IOC,
+            "type_filling": self._get_filling_mode(pos.symbol),
         }
 
         result = mt5.order_send(request)
