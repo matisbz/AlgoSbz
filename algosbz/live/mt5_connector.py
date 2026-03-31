@@ -40,8 +40,8 @@ class MT5Connector:
             return False
 
         info = mt5.account_info()
-        logger.info("Connected: %d@%s balance=%.2f equity=%.2f",
-                     self.login, self.server, info.balance, info.equity)
+        logger.debug("Connected: %d@%s balance=%.2f equity=%.2f",
+                      self.login, self.server, info.balance, info.equity)
         self._connected = True
         return True
 

@@ -14,14 +14,14 @@
 # ═══════════════════════════════════════════════════════════════
 
 accounts:
-  - name: "Account_1"
+  - name: "FTMO_DEMO"
     enabled: true
-    login: 0              # ← MT5 account number
-    password: ""          # ← MT5 password
-    server: ""            # ← MT5 server name (e.g. "FTMO-Demo", "TheFundedTrader-Server")
-    start_date: ""        # ← Exam purchase date (YYYY-MM-DD)
+    login: 1512866041              # ← MT5 account number
+    password: "$@5WalRl"          # ← MT5 password
+    server: "FTMO-Demo"            # ← MT5 server name (e.g. "FTMO-Demo", "TheFundedTrader-Server")
+    start_date: "2026-03-24"        # ← Exam purchase date (YYYY-MM-DD)
     state: phase1         # phase1 | phase2 | funded  (auto-updated)
-    initial_balance: 100000
+    initial_balance: 10000
 
   - name: "Account_2"
     enabled: false
@@ -98,7 +98,7 @@ symbol_map:
   GBPJPY: "GBPJPY"
   USDCHF: "USDCHF"
   USDJPY: "USDJPY"
-  XAUUSD: "XAUUSD"        # ← Some brokers use GOLD, GOLDm
-  XTIUSD: "XTIUSD"        # ← Some brokers use USOIL, WTI, CrudeOIL
-  XNGUSD: "XNGUSD"        # ← Some brokers use NATGAS, NGAS
-  SPY: "US500"             # ← FTMO usually offers US500, not SPY
+  XAUUSD: "XAUUSD"
+  XTIUSD: "USOIL.cash"    # FTMO: West Texas Intermediate
+  XNGUSD: "NATGAS.cash"   # FTMO: Natural Gas
+  SPY: "US500.cash"        # FTMO: S&P 500 Index

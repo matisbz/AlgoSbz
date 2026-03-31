@@ -59,14 +59,15 @@ LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 from logging.handlers import RotatingFileHandler
 
+_stream = logging.StreamHandler()
+_stream.flush = lambda: _stream.stream.flush()
+_file = logging.FileHandler(LOG_PATH, mode="w", encoding="utf-8")
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        RotatingFileHandler(LOG_PATH, maxBytes=10_000_000, backupCount=5,
-                           encoding="utf-8"),
-    ]
+    handlers=[_stream, _file],
+    force=True,
 )
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,11 @@ class StrategyManager:
                 continue
             self.strategies[combo].setup(self.bar_data[key])
             self._setup_done.add(combo)
+            # Mark last completed bar so we don't generate stale signals
+            # from the startup batch — only truly new bars will trigger signals
+            df = self.bar_data[key]
+            if len(df) >= 2:
+                self.last_signal_bar[combo] = df.index[-2]
             logger.info("  %s setup OK (%d bars)", combo, len(self.bar_data[key]))
 
     def check_new_bars(self, mt5_conn) -> dict[tuple[str, str], pd.DataFrame]:
@@ -176,8 +182,8 @@ class StrategyManager:
         Generate signals on newly completed bars.
 
         Replicates backtest: strategy.on_bar(idx, bar, has_position)
-        on the LAST COMPLETED bar (second to last in buffer, since last
-        may still be forming).
+        on ALL completed bars since last check, sequentially, to maintain
+        strategy internal state (stateful strategies need every bar).
 
         has_position_fn(combo_name) → bool: checks if combo has open position.
         """
@@ -197,33 +203,35 @@ class StrategyManager:
             # but indicators need to cover new bars too)
             strategy.setup(df)
 
-            # Signal on LAST COMPLETED bar = second to last
-            # (last bar may still be forming in live)
-            idx = len(df) - 2
-            if idx < 0:
-                continue
+            # Process ALL completed bars since last check, sequentially.
+            # Last bar (df.iloc[-1]) may still be forming, so stop at -2.
+            last_processed = self.last_signal_bar.get(combo)
+            start_idx = 0
+            if last_processed is not None:
+                # Find the index after the last processed bar
+                matches = df.index.get_indexer([last_processed], method=None)
+                if matches[0] >= 0:
+                    start_idx = matches[0] + 1
 
-            bar = df.iloc[idx]
-            bar_time = df.index[idx]
+            # Don't process the last bar (still forming)
+            end_idx = len(df) - 1
 
-            # Skip if we already generated a signal for this bar
-            if self.last_signal_bar.get(combo) == bar_time:
-                continue
+            for idx in range(start_idx, end_idx):
+                bar = df.iloc[idx]
+                bar_time = df.index[idx]
 
-            # has_position per combo (matches backtest: broker.has_position)
-            has_pos = has_position_fn(combo)
+                has_pos = has_position_fn(combo)
+                signal = strategy.on_bar(idx, bar, has_pos)
+                self.last_signal_bar[combo] = bar_time
 
-            signal = strategy.on_bar(idx, bar, has_pos)
-            self.last_signal_bar[combo] = bar_time
-
-            if signal.action in (SignalAction.ENTER_LONG, SignalAction.ENTER_SHORT):
-                if not has_pos:  # backtest only enters if no position
-                    self.pending_signals[combo] = signal
-                    logger.info("PENDING SIGNAL: %s → %s SL=%.5f TP=%s (bar=%s)",
-                                combo, signal.action.name,
-                                signal.stop_loss or 0,
-                                f"{signal.take_profit:.5f}" if signal.take_profit else "None",
-                                bar_time)
+                if signal.action in (SignalAction.ENTER_LONG, SignalAction.ENTER_SHORT):
+                    if not has_pos:
+                        self.pending_signals[combo] = signal
+                        logger.info("PENDING SIGNAL: %s → %s SL=%.5f TP=%s (bar=%s)",
+                                    combo, signal.action.name,
+                                    signal.stop_loss or 0,
+                                    f"{signal.take_profit:.5f}" if signal.take_profit else "None",
+                                    bar_time)
 
         return signals
 

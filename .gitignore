@@ -1,7 +1,4 @@
-__pycache__/
-*.pyc
-*.pyo
-.env
+data/
 cache/
-*.parquet
-.streamlit/
+*.pyc
+__pycache__/
