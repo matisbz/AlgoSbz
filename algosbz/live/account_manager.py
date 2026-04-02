@@ -97,10 +97,25 @@ class AccountState:
         logger.info("[%s] New day. Equity=%.2f, State=%s, TradingDays=%d",
                     self.name, equity, self.state, self.trading_days)
 
+    @property
+    def target_reached(self) -> bool:
+        """True if profit target reached but still waiting for min trading days."""
+        if self.state == "phase1":
+            profit_pct = (self.current_equity - self.initial_balance) / self.initial_balance * 100
+            return profit_pct >= 10.0 and self.trading_days < 4
+        elif self.state == "phase2":
+            profit_pct = (self.current_equity - self.initial_balance) / self.initial_balance * 100
+            return profit_pct >= 5.0 and self.trading_days < 4
+        return False
+
     def can_trade(self, combo_name: str, instrument: str) -> tuple[bool, str]:
         """Check if a trade is allowed given portfolio controls."""
         if not self.enabled:
             return False, "account disabled"
+
+        # Target reached — stop real trading, wait for min days with micro-ops
+        if self.target_reached:
+            return False, "target reached, waiting for min trading days (micro-ops only)"
 
         if self._daily_stopped:
             return False, f"daily cap hit ({self.daily_cap_pct}%)"

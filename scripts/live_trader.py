@@ -44,6 +44,7 @@ from algosbz.risk.manager import RiskManager
 from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
+from algosbz.live import telegram
 
 # ─── Configuration ──────────────────────────────────────────────
 
@@ -287,16 +288,24 @@ class StrategyManager:
         self.pending_signals.pop(combo, None)
 
     def discard_stale_signals(self):
-        """Remove pending signals that are more than 1 bar old (expired)."""
+        """
+        Remove pending signals that have missed their execution window.
+
+        A signal generated on bar[i] should execute on bar[i+1].
+        If we're now on bar[i+2] or later, the signal is stale.
+        This matches backtest behavior: pending signals only live for 1 bar.
+        """
         stale = []
         for combo, signal in self.pending_signals.items():
             key = (self.symbols[combo], self.timeframes[combo])
             if key in self.bar_data:
                 df = self.bar_data[key]
-                if len(df) >= 2:
-                    # Signal should execute on the bar after it was generated.
-                    # If we're already past that, it's stale.
+                if len(df) >= 3:
                     signal_bar = self.last_signal_bar.get(combo)
+                    # Signal from bar[i] should execute during bar[i+1].
+                    # If current forming bar is bar[i+2] or later, it's stale.
+                    # df.index[-1] = forming bar, df.index[-2] = last completed bar
+                    # Signal is stale if it was generated before the last completed bar
                     if signal_bar is not None and signal_bar < df.index[-2]:
                         stale.append(combo)
         for combo in stale:
@@ -487,6 +496,8 @@ def save_state(accounts: list[LiveAccount], day_date: str,
                 "stop_loss": signal.stop_loss,
                 "take_profit": signal.take_profit,
                 "metadata": signal.metadata,
+                "generated_at": datetime.now().isoformat(),
+                "timeframe": strat_mgr.timeframes.get(combo, "H4"),
             }
         state["pending_signals"] = pending
 
@@ -590,6 +601,8 @@ def sync_closed_positions_for_account(acct: LiveAccount, mt5_conn) -> list[str]:
             closed_combos.append(combo)
             logger.info("[%s] Position closed: %s ticket=%d PnL=%.2f",
                         acct.state.name, combo, ticket, pnl)
+            telegram.notify_trade_closed(acct.state.name, combo, pnl,
+                                         ticket, acct.state.current_equity)
 
             save_trade_log({
                 "account": acct.state.name,
@@ -656,6 +669,11 @@ def main():
     # Restore state from previous session (open positions, counters)
     saved_pending = load_state(accounts)
 
+    # Pending signals are NOT restored here. They will be validated after
+    # history download, when we know the current bar timestamps.
+    # This prevents executing stale signals from hours/days ago.
+    _saved_pending_raw = saved_pending
+
     # ─── Initial setup ───────────────────────────────────────────
     from algosbz.live.mt5_connector import MT5Connector
 
@@ -671,6 +689,53 @@ def main():
 
     # Download history and setup strategies (setup called ONCE)
     strat_mgr.setup_with_history(conn)
+
+    # Restore pending signals ONLY if they're from the immediately previous bar
+    # (exactly like backtest: signal on bar[i] → execute on bar[i+1] open, never later)
+    if _saved_pending_raw:
+        for combo, sig_data in _saved_pending_raw.items():
+            if combo not in strat_mgr.deck:
+                continue
+            sym = strat_mgr.symbols[combo]
+            tf = strat_mgr.timeframes[combo]
+            key = (sym, tf)
+            if key not in strat_mgr.bar_data:
+                continue
+
+            df = strat_mgr.bar_data[key]
+            if len(df) < 2:
+                continue
+
+            # Signal is valid only if generated_at falls within the previous bar's window
+            generated_at = sig_data.get("generated_at")
+            if not generated_at:
+                logger.warning("DISCARD %s: no generated_at timestamp", combo)
+                continue
+
+            try:
+                gen_time = datetime.fromisoformat(generated_at)
+            except (ValueError, TypeError):
+                logger.warning("DISCARD %s: bad generated_at", combo)
+                continue
+
+            prev_bar_time = df.index[-2]
+            curr_bar_time = df.index[-1]
+            # Signal must have been generated between prev_bar open and current bar open
+            if gen_time < prev_bar_time or gen_time >= curr_bar_time:
+                logger.warning("STALE signal discarded: %s (generated %s, prev bar %s, current bar %s)",
+                               combo, gen_time, prev_bar_time, curr_bar_time)
+                continue
+
+            action = SignalAction[sig_data["action"]]
+            symbol = ALL_COMBOS[combo]["symbol"]
+            restored_signal = Signal(
+                action=action, symbol=symbol, timestamp=gen_time,
+                stop_loss=sig_data.get("stop_loss"),
+                take_profit=sig_data.get("take_profit"),
+                metadata=sig_data.get("metadata", {}),
+            )
+            strat_mgr.pending_signals[combo] = restored_signal
+            logger.info("Restored pending signal: %s → %s (generated %s)", combo, action.name, gen_time)
 
     # Sync equity for first account
     info = conn.get_account_info()
@@ -696,8 +761,12 @@ def main():
     # ─── Main trading loop ───────────────────────────────────────
     logger.info("\nTrading loop started (poll=%ds)\n", POLL_INTERVAL)
 
+    telegram.notify_startup(len(accounts), len(deck),
+                            "DRY RUN" if args.dry_run else "LIVE")
+
     cycle = 0
     last_day = datetime.now().date()
+    last_heartbeat = datetime.now()
 
     while True:
         cycle += 1
@@ -724,6 +793,49 @@ def main():
                     for acct in accounts:
                         acct.new_day(acct.state.current_equity)
 
+            # Micro-op: if target reached but < 4 trading days, open/close
+            # 0.01 EURUSD to register the trading day (no real risk)
+            if not args.dry_run:
+                for acct in accounts:
+                    if acct.state.target_reached:
+                        micro_symbol = "EURUSD"
+                        conn = MT5Connector(acct.state.login, acct.state.password,
+                                           acct.state.server, symbol_map)
+                        if conn.connect():
+                            logger.info("[%s] TARGET REACHED — executing micro-op "
+                                       "(0.01 %s) for trading day %d/4",
+                                       acct.state.name, micro_symbol,
+                                       acct.state.trading_days + 1)
+                            result = conn.open_position(
+                                micro_symbol, "BUY", 0.01,
+                                sl=0.0, tp=None,
+                                comment="micro-op-min-days")
+                            if result:
+                                import time as _t
+                                _t.sleep(2)  # brief pause to register
+                                conn.close_position(result["ticket"])
+                                acct.state._instr_day_trades[micro_symbol] += 1
+                                logger.info("[%s] Micro-op done (ticket %d)",
+                                           acct.state.name, result["ticket"])
+                                telegram.send(
+                                    f"\U0001f4cd <b>MICRO-OP</b> {acct.state.name}\n"
+                                    f"Trading day {acct.state.trading_days + 1}/4 "
+                                    f"(target already reached)")
+                            else:
+                                logger.warning("[%s] Micro-op failed", acct.state.name)
+                            conn.disconnect()
+
+            # Heartbeat every 4 hours
+            if (datetime.now() - last_heartbeat).total_seconds() >= 4 * 3600:
+                last_heartbeat = datetime.now()
+                telegram.notify_heartbeat([{
+                    "name": a.state.name, "state": a.state.state,
+                    "equity": a.state.current_equity,
+                    "initial": a.state.initial_balance,
+                    "trades": a.state.total_trades,
+                    "open": len(a.open_positions),
+                } for a in accounts])
+
             # Step 1: Sync closed positions per account (rotate logins)
             # Each account needs its own MT5 session to see its positions
             if not args.dry_run:
@@ -739,6 +851,49 @@ def main():
                         if info:
                             acct.sync_equity(info["equity"])
                         conn.disconnect()
+
+            # Step 1b: DD safety check — close all if limits breached
+            # Replicates backtest engine's risk_mgr.is_halted → close_all_positions
+            if not args.dry_run:
+                for acct in accounts:
+                    if not acct.open_positions:
+                        continue
+                    equity = acct.state.current_equity
+                    initial = acct.state.initial_balance
+                    day_start = acct.state._day_start_equity
+
+                    # Overall DD check (same formula as manager.py:190)
+                    overall_dd = (initial - equity) / initial if initial > 0 else 0
+                    # Daily DD check (same formula as manager.py:201)
+                    daily_dd = (day_start - equity) / initial if initial > 0 else 0
+
+                    dd_breach = False
+                    if overall_dd >= 0.085:  # 8.5% total DD limit
+                        logger.warning("[%s] TOTAL DD BREACH: %.2f%% — closing all positions!",
+                                       acct.state.name, overall_dd * 100)
+                        telegram.notify_dd_breach(acct.state.name, "TOTAL", overall_dd * 100)
+                        dd_breach = True
+                    elif daily_dd >= 0.04:  # 4% daily DD limit
+                        logger.warning("[%s] DAILY DD BREACH: %.2f%% — closing all positions!",
+                                       acct.state.name, daily_dd * 100)
+                        telegram.notify_dd_breach(acct.state.name, "DAILY", daily_dd * 100)
+                        dd_breach = True
+
+                    if dd_breach:
+                        conn = MT5Connector(acct.state.login, acct.state.password,
+                                           acct.state.server, symbol_map)
+                        if conn.connect():
+                            for combo, ticket in list(acct.open_positions.items()):
+                                if ticket != "dry_run":
+                                    if conn.close_position(ticket):
+                                        pnl = get_deal_pnl(ticket)
+                                        acct.on_trade_closed(combo, pnl)
+                                        logger.info("[%s] DD SAFETY CLOSE: %s ticket=%d PnL=%.2f",
+                                                    acct.state.name, combo, ticket, pnl)
+                            conn.disconnect()
+                        # Clear pending signals — don't open new trades
+                        strat_mgr.pending_signals.clear()
+                        save_state(accounts, str(today), strat_mgr)
 
             # Connect to first account for market data
             conn = MT5Connector(accounts[0].state.login,
@@ -775,6 +930,9 @@ def main():
             strat_mgr.generate_signals(new_feeds, lambda combo: False)
 
             conn.disconnect()
+
+            # Save state after generating signals (so pending signals survive crashes)
+            save_state(accounts, str(today), strat_mgr)
 
             # Step 5: Execute pending signals that are now ready
             if not executable:
@@ -825,6 +983,10 @@ def main():
                                 f"{order['tp']:.5f}" if order["tp"] else "None")
                     acct.on_trade_executed(order["combo"], "dry_run")
                     executed_combos.add(order["combo"])
+                    telegram.notify_trade_opened(
+                        acct.state.name, order["direction"], order["combo"],
+                        order["volume"], order["fill_price"],
+                        order["sl"], order["tp"], acct.state.state)
             else:
                 # Group by account, execute with rotation
                 by_account = defaultdict(list)
@@ -853,6 +1015,17 @@ def main():
                         if result:
                             acct.on_trade_executed(order["combo"], result["ticket"])
                             executed_combos.add(order["combo"])
+                        else:
+                            # Execution failed — consume signal to match backtest
+                            # (backtest never retries; signal lives for exactly 1 bar)
+                            executed_combos.add(order["combo"])
+                            logger.warning("[%s] Execution failed for %s — "
+                                          "signal consumed (no retry)",
+                                          acct_name, order["combo"])
+                            telegram.notify_trade_opened(
+                                acct.state.name, order["direction"], order["combo"],
+                                order["volume"], result["price"],
+                                order["sl"], order["tp"], acct.state.state)
                             save_trade_log({
                                 "account": acct_name,
                                 "combo": order["combo"],

@@ -16,8 +16,8 @@
 accounts:
   - name: "FTMO_DEMO"
     enabled: true
-    login: 1512866041              # ← MT5 account number
-    password: "$@5WalRl"          # ← MT5 password
+    login: 1512964593              # ← MT5 account number
+    password: "nIQHl?m7"          # ← MT5 password
     server: "FTMO-Demo"            # ← MT5 server name (e.g. "FTMO-Demo", "TheFundedTrader-Server")
     start_date: "2026-03-24"        # ← Exam purchase date (YYYY-MM-DD)
     state: phase1         # phase1 | phase2 | funded  (auto-updated)

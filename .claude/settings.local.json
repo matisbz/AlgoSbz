@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch"
+      "WebSearch",
+      "Bash(taskkill /PID 15504 /F)",
+      "Bash(taskkill //PID 15504 //F)"
     ]
   }
 }

@@ -132,6 +132,8 @@ def simulate_exam(streams, combo_names, start_date,
         max_dd = 0
         max_daily_dd = 0
         locked = False
+        target_reached = False
+        target_reached_day = None
         days_used = window_days
         combo_day_losses = defaultdict(int)
         instr_day_trades = defaultdict(int)
@@ -163,6 +165,15 @@ def simulate_exam(streams, combo_names, start_date,
                 instr_day_trades.clear()
                 total_daily_losses = 0
                 daily_stopped = False
+
+            # Once target reached, stop real trading — just count trading days
+            # (simulates micro-operations to meet min days requirement)
+            if target_reached:
+                trading_days.add(t["date"])
+                if len(trading_days) >= 4:
+                    locked = True
+                    days_used = (t["date"] - phase_start.date()).days + 1
+                continue
 
             if daily_stopped:
                 continue
@@ -205,22 +216,42 @@ def simulate_exam(streams, combo_names, start_date,
                         "max_daily_dd": daily_dd_hard * 100,
                         "trading_days": len(trading_days), "days_used": window_days}
 
-            if equity >= target_equity and len(trading_days) >= 4:
-                locked = True
-                days_used = (t["date"] - phase_start.date()).days + 1
+            if equity >= target_equity:
+                if len(trading_days) >= 4:
+                    locked = True
+                    days_used = (t["date"] - phase_start.date()).days + 1
+                else:
+                    target_reached = True
+                    target_reached_day = t["date"]
 
         if current_day and not locked:
             daily_dd = (daily_start_eq - equity) / initial
             max_daily_dd = max(max_daily_dd, daily_dd)
+
+        # If target was reached but ran out of trades before 4 days,
+        # check if enough weekdays remain in the window to fill min days
+        if target_reached and not locked and len(trading_days) < 4:
+            days_needed = 4 - len(trading_days)
+            remaining_days = 0
+            check_date = target_reached_day + timedelta(days=1)
+            while check_date < phase_end.date() and remaining_days < days_needed:
+                if check_date.weekday() < 5:  # Mon-Fri
+                    remaining_days += 1
+                check_date += timedelta(days=1)
+            if remaining_days >= days_needed:
+                locked = True
+                trading_days_total = len(trading_days) + days_needed
+                days_used = (check_date - phase_start.date()).days
 
         profit_pct = (equity - starting_equity) / initial * 100
         if max_dd >= 0.10:
             outcome = "FAIL_DD"
         elif max_daily_dd >= 0.05:
             outcome = "FAIL_DAILY_DD"
-        elif equity >= target_equity and len(trading_days) >= 4:
+        elif locked or (equity >= target_equity and len(trading_days) >= 4):
             outcome = "PASS"
         elif equity >= target_equity:
+            # Target reached but not enough weekdays left in window (very rare)
             outcome = "FAIL_MIN_DAYS"
         else:
             outcome = "FAIL_PROFIT"
@@ -505,7 +536,7 @@ def main():
     print(f"    Termination:    {term_rate:.0f}% within 18mo")
     print(f"    Avg monthly:    ${avg_pnl_mo:+,.0f} per $100K")
     print(f"    Avg total:      ${avg_total:+,.0f} lifetime per account")
-    print(f"    Scaled $5K:     ${avg_pnl_mo * 0.05:+,.0f}/mo gross → "
+    print(f"    Scaled $5K:     ${avg_pnl_mo * 0.05:+,.0f}/mo gross -> "
           f"${avg_pnl_mo * 0.05 * 0.8:+,.0f}/mo net (80% split)")
 
     # ══════════════════════════════════════════════════════════════

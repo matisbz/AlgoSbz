@@ -76,9 +76,10 @@ class EquityManager:
             if self.config.streak_reset_on_loss:
                 self._consecutive_wins = 0
 
-        # Check daily stop
-        if self._start_of_day_equity > 0:
-            daily_dd = (self._start_of_day_equity - equity) / self._start_of_day_equity
+        # Check daily stop — use initial_balance as denominator (matches RiskManager
+        # and FTMO rules: daily DD = (start_of_day - equity) / initial_balance)
+        if self._initial_balance > 0:
+            daily_dd = (self._start_of_day_equity - equity) / self._initial_balance
             if daily_dd >= self.config.daily_stop_threshold:
                 self._daily_halted = True
 
@@ -131,6 +132,6 @@ class EquityManager:
 
     @property
     def daily_dd_pct(self) -> float:
-        if self._start_of_day_equity <= 0:
+        if self._initial_balance <= 0:
             return 0.0
-        return max(0, (self._start_of_day_equity - self._current_equity) / self._start_of_day_equity)
+        return max(0, (self._start_of_day_equity - self._current_equity) / self._initial_balance)

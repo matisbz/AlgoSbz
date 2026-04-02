@@ -111,8 +111,9 @@ class RiskManager:
         lot_size = round(lot_size, 2)
 
         # Check if this trade would risk too much given current drawdown state
-        # Static drawdown: measured from initial balance (standard in most prop firms)
-        floor_daily = self.start_of_day_equity * (1 - self.config.daily_dd_limit)
+        # FTMO daily DD = (start_of_day - equity) / initial_balance
+        # So floor = start_of_day - initial_balance * daily_dd_limit
+        floor_daily = self.start_of_day_equity - self.initial_balance * self.config.daily_dd_limit
         remaining_daily = current_equity - floor_daily
 
         floor_total = self.initial_balance * (1 - self.config.max_dd_limit)
