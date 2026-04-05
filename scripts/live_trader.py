@@ -496,7 +496,7 @@ def save_state(accounts: list[LiveAccount], day_date: str,
                 "stop_loss": signal.stop_loss,
                 "take_profit": signal.take_profit,
                 "metadata": signal.metadata,
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": signal.timestamp.isoformat(),
                 "timeframe": strat_mgr.timeframes.get(combo, "H4"),
             }
         state["pending_signals"] = pending
