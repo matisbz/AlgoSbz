@@ -1021,6 +1021,16 @@ def main():
                         if result:
                             acct.on_trade_executed(order["combo"], result["ticket"])
                             executed_combos.add(order["combo"])
+                            telegram.notify_trade_opened(
+                                account=acct.state.name,
+                                direction=order["direction"],
+                                combo=order["combo"],
+                                volume=result["volume"],
+                                fill_price=result["price"],
+                                sl=order["sl"],
+                                tp=order["tp"],
+                                state=acct.state.state,
+                            )
                         else:
                             # Execution failed — consume signal to match backtest
                             # (backtest never retries; signal lives for exactly 1 bar)
