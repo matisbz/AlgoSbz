@@ -16,7 +16,7 @@ OHLCV_RULES = {
     "low": "min",
     "close": "last",
     "volume": "sum",
-    "spread": "mean",
+    "spread": "first",
 }
 
 

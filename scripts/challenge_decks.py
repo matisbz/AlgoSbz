@@ -46,6 +46,9 @@ STRAT_REGISTRY = {
     "SMCOB": {"module": "algosbz.strategy.smc_order_block", "class": "SMCOrderBlock"},
     "FVGrev": {"module": "algosbz.strategy.fvg_reversion", "class": "FVGReversion"},
     "VWAPrev": {"module": "algosbz.strategy.vwap_reversion", "class": "VWAPReversion"},
+    "MACross": {"module": "algosbz.strategy.ma_crossover", "class": "MACrossover"},
+    "RSIext": {"module": "algosbz.strategy.rsi_extreme", "class": "RSIExtreme"},
+    "KeltSq": {"module": "algosbz.strategy.keltner_squeeze", "class": "KeltnerSqueeze"},
 }
 
 ALL_COMBOS = {
@@ -168,6 +171,181 @@ ALL_COMBOS = {
         "strat": "RegVMR", "symbol": "XAUUSD", "tier": "SPREAD_OK", "pf": 1.20,
         "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
                    "bb_std": 2.0, "consec_outside": 1},
+    },
+    # ── NEW: MA Crossover combos ──
+    "MACross_EURUSD_H4": {
+        "strat": "MACross", "symbol": "EURUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_GBPJPY_H4": {
+        "strat": "MACross", "symbol": "GBPJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_XAUUSD_H4": {
+        "strat": "MACross", "symbol": "XAUUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_XTIUSD_H4": {
+        "strat": "MACross", "symbol": "XTIUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_USDCHF_H1": {
+        "strat": "MACross", "symbol": "USDCHF", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "MACross_SPY_H4": {
+        "strat": "MACross", "symbol": "SPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_XNGUSD_H4": {
+        "strat": "MACross", "symbol": "XNGUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "MACross_USDJPY_H4": {
+        "strat": "MACross", "symbol": "USDJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    # ── NEW: RSI Extreme combos ──
+    "RSIext_EURUSD_H4": {
+        "strat": "RSIext", "symbol": "EURUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_GBPJPY_H4": {
+        "strat": "RSIext", "symbol": "GBPJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_XAUUSD_H4": {
+        "strat": "RSIext", "symbol": "XAUUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_XTIUSD_H4": {
+        "strat": "RSIext", "symbol": "XTIUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_USDCHF_H1": {
+        "strat": "RSIext", "symbol": "USDCHF", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "RSIext_SPY_H4": {
+        "strat": "RSIext", "symbol": "SPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_XNGUSD_H4": {
+        "strat": "RSIext", "symbol": "XNGUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RSIext_USDJPY_H4": {
+        "strat": "RSIext", "symbol": "USDJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    # ── NEW: Keltner Squeeze combos ──
+    "KeltSq_EURUSD_H4": {
+        "strat": "KeltSq", "symbol": "EURUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_GBPJPY_H4": {
+        "strat": "KeltSq", "symbol": "GBPJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_XAUUSD_H4": {
+        "strat": "KeltSq", "symbol": "XAUUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_XTIUSD_H4": {
+        "strat": "KeltSq", "symbol": "XTIUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_USDCHF_H1": {
+        "strat": "KeltSq", "symbol": "USDCHF", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "KeltSq_SPY_H4": {
+        "strat": "KeltSq", "symbol": "SPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_XNGUSD_H4": {
+        "strat": "KeltSq", "symbol": "XNGUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_USDJPY_H4": {
+        "strat": "KeltSq", "symbol": "USDJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    # ── NEW: NDAQ combos (data available, zero combos until now) ──
+    "VMR_NDAQ_H4": {
+        "strat": "VMR", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "TPB_NDAQ_H4": {
+        "strat": "TPB", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
+    },
+    "SwBrk_NDAQ_H4": {
+        "strat": "SwBrk", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "SwBrk_NDAQ_slow_H4": {
+        "strat": "SwBrk", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4", "donchian_period": 30, "squeeze_pct": 0.75, "tp_atr_mult": 4.0},
+    },
+    "Engulf_NDAQ_H4": {
+        "strat": "Engulf", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23},
+    },
+    "Engulf_NDAQ_tight_H4": {
+        "strat": "Engulf", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4", "session_start": 0, "session_end": 23,
+                   "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
+    },
+    "MomDiv_NDAQ_H1": {
+        "strat": "MomDiv", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "MACross_NDAQ_H4": {
+        "strat": "MACross", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "KeltSq_NDAQ_H4": {
+        "strat": "KeltSq", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    "RegVMR_NDAQ_H1": {
+        "strat": "RegVMR", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23},
+    },
+    "StrBrk_NDAQ_H4": {
+        "strat": "StrBrk", "symbol": "NDAQ", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H4"},
+    },
+    # ── NEW: H1 variants for top H4 strategies (more trading days) ──
+    "Engulf_XAUUSD_H1": {
+        "strat": "Engulf", "symbol": "XAUUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
+    },
+    "Engulf_EURUSD_H1": {
+        "strat": "Engulf", "symbol": "EURUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
+    },
+    "SwBrk_XTIUSD_H1": {
+        "strat": "SwBrk", "symbol": "XTIUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "TPB_XTIUSD_H1": {
+        "strat": "TPB", "symbol": "XTIUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1", "session_start": 0, "session_end": 23,
+                   "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
+    },
+    "StrBrk_GBPJPY_H1": {
+        "strat": "StrBrk", "symbol": "GBPJPY", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1"},
+    },
+    "EMArib_XNGUSD_H1": {
+        "strat": "EMArib", "symbol": "XNGUSD", "tier": "NEW", "pf": 1.0,
+        "params": {"timeframe": "H1", "ribbon_threshold": 0.5, "ribbon_confirm_bars": 2,
+                   "rsi_pullback_bull": 50, "rsi_pullback_bear": 50},
     },
 }
 

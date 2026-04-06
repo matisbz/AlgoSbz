@@ -2,8 +2,8 @@
 Production Validation — independent check of the best config from optimize_deck.py.
 
 Takes the FIXED best config (no optimization here) and validates it:
-1. Exam mode: Decorr16_A @2% DC2.5 CD1 P2x0.5
-2. Funded mode: RF0.7 DC1.5 CD2
+1. Exam mode: Full_All @2% DC2.0 CD2 P2x0.5 MI2 ML5
+2. Funded mode: RF0.25 DC2.5 CD1 MI2 ML3
 3. Full year-by-year breakdown + funded survival + ROI
 
 This script must AGREE with optimize_deck.py results. If it doesn't, there's a bug.
@@ -38,29 +38,35 @@ from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
 # ═══════════════════════════════════════════════════════════════
 
 EXAM_CONFIG = {
-    "daily_cap": 2.5,
-    "cooldown": 1,
+    "daily_cap": 2.0,
+    "cooldown": 2,
     "p2_rf": 0.5,
     "max_instr": 2,
-    "max_losses": 3,
+    "max_losses": 5,
 }
 
 FUNDED_CONFIG = {
-    "risk_factor": 0.7,
-    "daily_cap": 1.5,
-    "cooldown": 2,
+    "risk_factor": 0.25,
+    "daily_cap": 2.5,
+    "cooldown": 1,
     "max_instr": 2,
     "max_losses": 3,
 }
 
-# Decorr16_A deck (from optimize_deck.py greedy selection)
+# Full_All deck (from optimize_deck.py — 35 combos, 9 instruments)
 DECK = [
-    "SessBrk_XTIUSD_M15", "SwBrk_SPY_slow_H4", "SMCOB_XAUUSD_loose_H4",
-    "Engulf_XAUUSD_tight_H4", "TPB_XTIUSD_loose_H4", "TPB_XNGUSD_loose_H4",
-    "RegVMR_XTIUSD_H1", "VMR_SPY_H4", "Engulf_EURUSD_tight_H4",
-    "SwBrk_XTIUSD_H4", "VMR_USDCHF_H1", "RegVMR_XAUUSD_H1",
-    "StrBrk_GBPJPY_slow_H4", "EMArib_XNGUSD_loose_H4", "SMCOB_XAUUSD_H4",
-    "SwBrk_SPY_fast_H4",
+    "TPB_XTIUSD_loose_H4", "TPB_XNGUSD_loose_H4", "SwBrk_XTIUSD_H4",
+    "SwBrk_SPY_H4", "SwBrk_SPY_slow_H4", "Engulf_EURUSD_tight_H4",
+    "Engulf_XAUUSD_tight_H4", "StrBrk_GBPJPY_slow_H4", "MomDiv_SPY_H1",
+    "RegVMR_XAUUSD_H1", "RegVMR_XTIUSD_H1", "SessBrk_XTIUSD_M15",
+    "SMCOB_XAUUSD_loose_H4", "VMR_USDCHF_H1", "VMR_USDJPY_H4",
+    "TPB_XTIUSD_H4", "TPB_GBPJPY_loose_H1", "IBB_EURUSD_loose_H4",
+    "Engulf_EURUSD_H4", "MomDiv_SPY_loose_H1", "EMArib_XNGUSD_loose_H4",
+    "MACross_EURUSD_H4", "MACross_XAUUSD_H4", "MACross_XTIUSD_H4",
+    "MACross_SPY_H4", "MACross_XNGUSD_H4", "RSIext_GBPJPY_H4",
+    "RSIext_XNGUSD_H4", "KeltSq_XTIUSD_H4", "KeltSq_XNGUSD_H4",
+    "VMR_NDAQ_H4", "SwBrk_NDAQ_slow_H4", "KeltSq_NDAQ_H4",
+    "SwBrk_XTIUSD_H1", "TPB_XTIUSD_H1",
 ]
 
 
@@ -391,7 +397,7 @@ def main():
 
     print(f"\n{'='*120}")
     print(f"  PRODUCTION VALIDATION — fixed config, no optimization")
-    print(f"  Deck: {len(DECK)} combos (Decorr16_A)")
+    print(f"  Deck: {len(DECK)} combos (Full_All)")
     print(f"  Exam:   DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
           f"P2x{EXAM_CONFIG['p2_rf']} MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
     print(f"  Funded: RF{FUNDED_CONFIG['risk_factor']} DC{FUNDED_CONFIG['daily_cap']} "
@@ -604,15 +610,17 @@ def main():
     print(f"    -> {term_rate:.0f}% terminated within 18mo")
 
     # Cross-check with optimize_deck.py
-    # Note: IS rate may differ slightly because optimize_deck uses different window range
-    # OOS rate is the real validation (same 2025 windows, same logic)
+    # Note: IS rate may differ slightly because optimize_deck uses 107 continuous windows
+    # while production_sim uses 90 (10/year × 9 years). OOS is the real validation.
     print(f"\n  CROSS-CHECK vs optimize_deck.py:")
-    expected_oos = 28.6
+    expected_oos = 42.9  # Full_All_DC2.0_CD2_L0_P2x0.5_MI2_ML5
+    expected_is = 43.0   # Slightly different window count (107 vs 90)
     oos_match = abs(oos_rate - expected_oos) < 1.0
     print(f"    OOS rate: {oos_rate:.1f}% (expected ~{expected_oos}%) {'OK' if oos_match else 'MISMATCH!'}")
+    print(f"    IS rate:  {is_rate:.1f}% (optimizer: ~{expected_is}%, diff due to window count)")
 
     if oos_match:
-        print(f"\n  VALIDATED — OOS results match optimizer. Ready for deployment.")
+        print(f"\n  VALIDATED — OOS results match optimizer. Ready for demo deployment.")
     else:
         print(f"\n  WARNING — OOS results differ from optimizer. Investigate before deploying!")
 

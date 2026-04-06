@@ -35,6 +35,8 @@ from collections import defaultdict
 
 from algosbz.core.config import load_config, load_all_instruments
 from algosbz.data.loader import DataLoader
+from algosbz.data.resampler import resample
+from algosbz.data.indicators import atr
 from algosbz.backtest.engine import BacktestEngine
 from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
@@ -174,6 +176,28 @@ def get_active_combos(streams, all_combos, eval_date, lookback_months=6, min_tra
     return active
 
 
+def compute_daily_regime(data_dict):
+    """
+    Compute daily ATR percentile for each instrument.
+    Returns {symbol: {date: atr_percentile_0_to_100}}.
+    Uses ONLY past data (100-day rolling window) — no look-ahead.
+    """
+    regime = {}
+    for sym, df_m1 in data_dict.items():
+        d1 = resample(df_m1, "D1")
+        if d1.empty or len(d1) < 120:
+            continue
+        a = atr(d1["high"], d1["low"], d1["close"], 14)
+        # Rolling percentile: where does current ATR rank in last 100 bars?
+        pctl = a.rolling(100, min_periods=50).apply(
+            lambda x: (x.iloc[-1] <= x).sum() / len(x) * 100, raw=False
+        )
+        regime[sym] = {}
+        for ts, val in pctl.items():
+            regime[sym][ts.date()] = val if not np.isnan(val) else 50.0
+    return regime
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # EXAM SIMULATOR — with P2 carry-over and portfolio controls
 # ═══════════════════════════════════════════════════════════════════════
@@ -182,6 +206,7 @@ def simulate_exam(streams, combo_names, start_date,
                   daily_loss_cap_pct=3.0, combo_daily_max_losses=1,
                   p2_risk_factor=1.0,
                   max_instr_per_day=99, max_daily_losses=99,
+                  regime_data=None, regime_threshold=90,
                   initial=100000, p1_days=30, p2_days=60):
     """
     Realistic FTMO 2-step exam simulation.
@@ -210,22 +235,29 @@ def simulate_exam(streams, combo_names, start_date,
         max_dd = 0
         max_daily_dd = 0
         locked = False
+        target_reached = False
+        target_reached_day = None
         days_used = window_days
         combo_day_losses = defaultdict(int)
-        instr_day_trades = defaultdict(int)  # {instrument: n_trades_today}
+        instr_day_trades = defaultdict(int)
         total_daily_losses = 0
         daily_stopped = False
 
-        # Target: need to gain target_pct% of INITIAL from starting_equity
         target_equity = starting_equity + (target_pct / 100) * initial
 
-        # Gather and sort all trades in window
         all_trades = []
         for combo in combo_names:
             if combo not in streams:
                 continue
             for t in streams[combo]:
                 if phase_start.date() <= t["date"] < phase_end.date():
+                    # Regime filter: skip trades during extreme volatility
+                    if regime_data is not None:
+                        instrument = ALL_COMBOS[combo]["symbol"]
+                        if instrument in regime_data:
+                            pctl = regime_data[instrument].get(t["date"], 50.0)
+                            if pctl >= regime_threshold:
+                                continue
                     all_trades.append(t)
         all_trades.sort(key=lambda x: x["ts"])
 
@@ -233,7 +265,6 @@ def simulate_exam(streams, combo_names, start_date,
             if locked:
                 break
 
-            # New day reset
             if t["date"] != current_day:
                 if current_day is not None:
                     daily_dd = (daily_start_eq - equity) / initial
@@ -245,41 +276,40 @@ def simulate_exam(streams, combo_names, start_date,
                 total_daily_losses = 0
                 daily_stopped = False
 
-            # CONTROL 1: Portfolio daily loss cap
+            # Once target reached, stop real trading -> micro-ops for min days
+            if target_reached:
+                trading_days.add(t["date"])
+                if len(trading_days) >= 4:
+                    locked = True
+                    days_used = (t["date"] - phase_start.date()).days + 1
+                continue
+
             if daily_stopped:
                 continue
 
-            # CONTROL 2: Per-combo cooldown
             combo = t["combo"]
             if combo_day_losses[combo] >= combo_daily_max_losses:
                 continue
 
-            # CONTROL 3: Max trades per instrument per day
             instrument = ALL_COMBOS[combo]["symbol"]
             if instr_day_trades[instrument] >= max_instr_per_day:
                 continue
-
-            # CONTROL 4: Max total daily losses
             if total_daily_losses >= max_daily_losses:
                 continue
 
-            # Execute trade (with phase risk factor)
             pnl = t["pnl"] * risk_factor
             equity += pnl
             trading_days.add(t["date"])
             instr_day_trades[instrument] += 1
 
-            # Track losses
             if pnl < 0:
                 combo_day_losses[combo] += 1
                 total_daily_losses += 1
 
-            # Check portfolio daily loss cap (soft, our control)
             daily_loss_pct = (daily_start_eq - equity) / initial * 100
             if daily_loss_pct >= daily_loss_cap_pct:
                 daily_stopped = True
 
-            # Check FTMO hard limits — DD from INITIAL
             dd = (initial - equity) / initial
             max_dd = max(max_dd, dd)
             if dd >= 0.10:
@@ -288,7 +318,6 @@ def simulate_exam(streams, combo_names, start_date,
                         "max_daily_dd": max_daily_dd * 100,
                         "trading_days": len(trading_days), "days_used": window_days}
 
-            # Check FTMO daily DD hard limit
             daily_dd_hard = (daily_start_eq - equity) / initial
             if daily_dd_hard >= 0.05:
                 return {"outcome": "FAIL_DAILY_DD", "profit_pct": (equity - starting_equity) / initial * 100,
@@ -296,22 +325,38 @@ def simulate_exam(streams, combo_names, start_date,
                         "max_daily_dd": daily_dd_hard * 100,
                         "trading_days": len(trading_days), "days_used": window_days}
 
-            # Profit lock: stop once target hit with 4+ trading days
-            if equity >= target_equity and len(trading_days) >= 4:
-                locked = True
-                days_used = (t["date"] - phase_start.date()).days + 1
+            if equity >= target_equity:
+                if len(trading_days) >= 4:
+                    locked = True
+                    days_used = (t["date"] - phase_start.date()).days + 1
+                else:
+                    target_reached = True
+                    target_reached_day = t["date"]
 
-        # Final daily DD
         if current_day and not locked:
             daily_dd = (daily_start_eq - equity) / initial
             max_daily_dd = max(max_daily_dd, daily_dd)
+
+        # If target reached but ran out of trades before 4 days,
+        # check if enough weekdays remain in the window for micro-ops
+        if target_reached and not locked and len(trading_days) < 4:
+            days_needed = 4 - len(trading_days)
+            remaining_days = 0
+            check_date = target_reached_day + timedelta(days=1)
+            while check_date < phase_end.date() and remaining_days < days_needed:
+                if check_date.weekday() < 5:
+                    remaining_days += 1
+                check_date += timedelta(days=1)
+            if remaining_days >= days_needed:
+                locked = True
+                days_used = (check_date - phase_start.date()).days
 
         profit_pct = (equity - starting_equity) / initial * 100
         if max_dd >= 0.10:
             outcome = "FAIL_DD"
         elif max_daily_dd >= 0.05:
             outcome = "FAIL_DAILY_DD"
-        elif equity >= target_equity and len(trading_days) >= 4:
+        elif locked or (equity >= target_equity and len(trading_days) >= 4):
             outcome = "PASS"
         elif equity >= target_equity:
             outcome = "FAIL_MIN_DAYS"
@@ -381,6 +426,11 @@ def main():
     active_pool = profitable_pool
     print(f"\n  Active combos: {len(active_pool)}/{len(pool)} (after PnL filter)")
 
+    # ── Step 1b: Compute daily regime data for all instruments ──
+    print("\n  Computing daily regime (ATR percentile) for regime filter...")
+    regime_data = compute_daily_regime(data_dict)
+    print(f"    Regime data for {len(regime_data)} instruments")
+
     # ── Step 2: Correlation matrix (IS data only, before 2025) ──
     print("\n  Computing correlation matrix (IS data only: <2025)...")
     oos_cutoff = date(2025, 1, 1)
@@ -403,7 +453,7 @@ def main():
     print(f"\n  Building deck candidates (ROBUST: {len(robust)}, ALL: {len(active_pool)})...")
 
     decks = {}
-    for size in [4, 6, 8, 10, 12, 16]:
+    for size in [4, 6, 8, 10, 12, 16, 20, 24]:
         if size <= len(robust):
             d = greedy_decorrelated_deck(streams, corr, size, robust)
             decks[f"Decorr{size}_R"] = d
@@ -435,20 +485,22 @@ def main():
 
     # Coarse grid to prevent overfitting
     grid_params = []
-    for daily_cap in [2.5, 3.0, 3.5, 4.0]:
+    for daily_cap in [2.0, 2.5, 3.0, 3.5, 4.0]:
         for cooldown in [1, 2]:
             for lookback in [0, 6]:
                 for p2_rf in [0.7, 0.5]:
                     for max_instr in [2, 3, 99]:
                         for max_losses in [3, 5, 99]:
-                            grid_params.append({
-                                "daily_cap": daily_cap,
-                                "cooldown": cooldown,
-                                "lookback": lookback,
-                                "p2_rf": p2_rf,
-                                "max_instr": max_instr,
-                                "max_losses": max_losses,
-                            })
+                            for regime in [0, 90]:
+                                grid_params.append({
+                                    "daily_cap": daily_cap,
+                                    "cooldown": cooldown,
+                                    "lookback": lookback,
+                                    "p2_rf": p2_rf,
+                                    "max_instr": max_instr,
+                                    "max_losses": max_losses,
+                                    "regime": regime,
+                                })
 
     total_sims = len(decks) * len(grid_params) * (len(is_windows) + len(oos_windows))
     print(f"  {len(decks)} decks × {len(grid_params)} control configs = "
@@ -482,6 +534,10 @@ def main():
                             is_n += 1
                         continue
 
+                    regime_kw = {}
+                    if gp["regime"] > 0:
+                        regime_kw = {"regime_data": regime_data, "regime_threshold": gp["regime"]}
+
                     r = simulate_exam(
                         streams, active, start,
                         daily_loss_cap_pct=gp["daily_cap"],
@@ -489,6 +545,7 @@ def main():
                         p2_risk_factor=gp["p2_rf"],
                         max_instr_per_day=gp["max_instr"],
                         max_daily_losses=gp["max_losses"],
+                        **regime_kw,
                     )
 
                     if is_oos:
@@ -507,15 +564,17 @@ def main():
             is_rate = is_funded / is_n * 100 if is_n else 0
             oos_rate = oos_funded / oos_n * 100 if oos_n else 0
 
+            regime_tag = f"_RG{gp['regime']}" if gp["regime"] > 0 else ""
             label = (f"{deck_name}_DC{gp['daily_cap']}_CD{gp['cooldown']}"
                      f"_L{gp['lookback']}_P2x{gp['p2_rf']}"
-                     f"_MI{gp['max_instr']}_ML{gp['max_losses']}")
+                     f"_MI{gp['max_instr']}_ML{gp['max_losses']}{regime_tag}")
 
             results.append({
                 "deck": deck_name, "label": label,
                 "daily_cap": gp["daily_cap"], "cooldown": gp["cooldown"],
                 "lookback": gp["lookback"], "p2_rf": gp["p2_rf"],
                 "max_instr": gp["max_instr"], "max_losses": gp["max_losses"],
+                "regime": gp["regime"],
                 "n_combos": len(combo_list),
                 "is_funded": is_funded, "is_n": is_n, "is_rate": is_rate,
                 "is_p1": is_p1_pass, "is_p1_rate": is_p1_pass / is_n * 100 if is_n else 0,
@@ -550,11 +609,11 @@ def main():
               f"{r['oos_p1_rate']:>5.1f}%  "
               f"{gap:>+5.1f}pp")
 
-    # ── Step 7: Best by OOS (the truth) ──
+    # ── Step 7: OOS ranking (for reference only, NOT for selection) ──
     results_oos = sorted(results, key=lambda x: (-x["oos_rate"], -x["is_rate"]))
 
     print(f"\n{'='*120}")
-    print(f"  TOP 15 by OOS funded rate (2025 — the only metric that counts)")
+    print(f"  TOP 15 by OOS funded rate (2025 — validation only, not selection)")
     print(f"{'='*120}")
     print(f"  {'Label':<55s} {'#':>3s} {'IS%':>6s} {'OOS%':>6s} {'OOS fund':>9s} "
           f"{'OOS P1':>7s} {'Gap':>6s}")
@@ -568,8 +627,8 @@ def main():
               f"{r['oos_p1']:>3d}/{r['oos_n']:<4d}  "
               f"{gap:>+5.1f}pp")
 
-    # ── Step 8: Best config — detailed OOS breakdown ──
-    best = results_oos[0]
+    # ── Step 8: Best config — selected by IS rate (OOS is validation only) ──
+    best = results[0]  # results already sorted by (-is_rate, -oos_rate)
     best_deck = decks[best["deck"]]
 
     print(f"\n{'='*120}")
@@ -590,6 +649,10 @@ def main():
         else:
             active = best_deck
 
+        regime_kw = {}
+        if best.get("regime", 0) > 0:
+            regime_kw = {"regime_data": regime_data, "regime_threshold": best["regime"]}
+
         r = simulate_exam(
             streams, active, start,
             daily_loss_cap_pct=best["daily_cap"],
@@ -597,6 +660,7 @@ def main():
             p2_risk_factor=best["p2_rf"],
             max_instr_per_day=best.get("max_instr", 99),
             max_daily_losses=best.get("max_losses", 99),
+            **regime_kw,
         )
 
         p1 = r["p1"]
@@ -637,6 +701,7 @@ def main():
                 p2_risk_factor=best["p2_rf"],
                 max_instr_per_day=best.get("max_instr", 99),
                 max_daily_losses=best.get("max_losses", 99),
+                **regime_kw,
             )
             if r["exam"] == "FUNDED": funded += 1
             if r["p1"]["outcome"] == "PASS": p1_pass += 1
@@ -697,7 +762,8 @@ def main():
                               combo_daily_max_losses=best["cooldown"],
                               p2_risk_factor=best["p2_rf"],
                               max_instr_per_day=best.get("max_instr", 99),
-                              max_daily_losses=best.get("max_losses", 99))
+                              max_daily_losses=best.get("max_losses", 99),
+                              **regime_kw)
             p1 = r["p1"]
             print(f"    {str(start.date()):<12s} P1: {p1['outcome']:>12s} {p1['profit_pct']:>+7.1f}% "
                   f"DD={p1['max_dd']:.1f}% (P2 data truncated — result unreliable)")

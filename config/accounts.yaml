@@ -2,7 +2,7 @@
 # LIVE TRADING — Account Configuration
 # ═══════════════════════════════════════════════════════════════
 #
-# Fill in your MT5 credentials below. Each account gets ALL 16 combos.
+# Fill in your MT5 credentials below. Each account gets ALL 35 combos.
 # Buy exams staggered ~7 days apart for decorrelation.
 #
 # States: phase1 → phase2 → funded (auto-updated by the system)
@@ -58,38 +58,57 @@ accounts:
 # Exam mode (phase1 & phase2): aggressive to pass fast
 exam_mode:
   risk_per_trade: 0.02    # 2% risk per trade
-  daily_cap_pct: 2.5      # Stop trading if daily loss >= 2.5%
-  cooldown: 1             # Max 1 loss per combo per day
+  daily_cap_pct: 2.0      # Stop trading if daily loss >= 2.0%
+  cooldown: 2             # Max 2 losses per combo per day
   max_instr_per_day: 2    # Max 2 trades per instrument per day
-  max_daily_losses: 3     # Max 3 total losses per day
+  max_daily_losses: 5     # Max 5 total losses per day
   p2_risk_factor: 0.5     # Half risk in Phase 2
 
 # Funded mode: conservative to survive long
 funded_mode:
-  risk_per_trade: 0.014   # 2% × 0.7 = 1.4% effective risk
-  daily_cap_pct: 1.5      # Tighter daily cap
-  cooldown: 2             # Max 2 losses per combo per day
+  risk_per_trade: 0.005   # 2% × 0.25 = 0.5% effective risk
+  daily_cap_pct: 2.5      # Daily cap
+  cooldown: 1             # Max 1 loss per combo per day
   max_instr_per_day: 2
   max_daily_losses: 3
 
-# Deck — the 16 combos (Decorr16_A)
+# Deck — 35 combos (Full_All, 9 instruments)
 deck:
-  - SessBrk_XTIUSD_M15
-  - SwBrk_SPY_slow_H4
-  - SMCOB_XAUUSD_loose_H4
-  - Engulf_XAUUSD_tight_H4
   - TPB_XTIUSD_loose_H4
   - TPB_XNGUSD_loose_H4
-  - RegVMR_XTIUSD_H1
-  - VMR_SPY_H4
-  - Engulf_EURUSD_tight_H4
   - SwBrk_XTIUSD_H4
-  - VMR_USDCHF_H1
-  - RegVMR_XAUUSD_H1
+  - SwBrk_SPY_H4
+  - SwBrk_SPY_slow_H4
+  - Engulf_EURUSD_tight_H4
+  - Engulf_XAUUSD_tight_H4
   - StrBrk_GBPJPY_slow_H4
+  - MomDiv_SPY_H1
+  - RegVMR_XAUUSD_H1
+  - RegVMR_XTIUSD_H1
+  - SessBrk_XTIUSD_M15
+  - SMCOB_XAUUSD_loose_H4
+  - VMR_USDCHF_H1
+  - VMR_USDJPY_H4
+  - TPB_XTIUSD_H4
+  - TPB_GBPJPY_loose_H1
+  - IBB_EURUSD_loose_H4
+  - Engulf_EURUSD_H4
+  - MomDiv_SPY_loose_H1
   - EMArib_XNGUSD_loose_H4
-  - SMCOB_XAUUSD_H4
-  - SwBrk_SPY_fast_H4
+  - MACross_EURUSD_H4
+  - MACross_XAUUSD_H4
+  - MACross_XTIUSD_H4
+  - MACross_SPY_H4
+  - MACross_XNGUSD_H4
+  - RSIext_GBPJPY_H4
+  - RSIext_XNGUSD_H4
+  - KeltSq_XTIUSD_H4
+  - KeltSq_XNGUSD_H4
+  - VMR_NDAQ_H4
+  - SwBrk_NDAQ_slow_H4
+  - KeltSq_NDAQ_H4
+  - SwBrk_XTIUSD_H1
+  - TPB_XTIUSD_H1
 
 # Symbol mapping: our internal name → MT5 symbol name
 # Adjust these to match your broker's symbol names
@@ -102,3 +121,4 @@ symbol_map:
   XTIUSD: "USOIL.cash"    # FTMO: West Texas Intermediate
   XNGUSD: "NATGAS.cash"   # FTMO: Natural Gas
   SPY: "US500.cash"        # FTMO: S&P 500 Index
+  NDAQ: "US100.cash"       # FTMO: Nasdaq 100 Index

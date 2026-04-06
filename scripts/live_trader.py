@@ -162,9 +162,15 @@ class StrategyManager:
             if last_known is not None and last_new <= last_known:
                 continue
 
-            # Append only truly new bars
             old_df = self.bar_data[key]
-            new_only = recent[recent.index > old_df.index[-1]]
+
+            # Refresh the previously-forming bar with its final OHLC
+            last_old_ts = old_df.index[-1]
+            if last_old_ts in recent.index:
+                old_df.loc[last_old_ts] = recent.loc[last_old_ts]
+
+            # Append only truly new bars
+            new_only = recent[recent.index > last_old_ts]
             if new_only.empty:
                 continue
 
@@ -806,7 +812,7 @@ def main():
                                        "(0.01 %s) for trading day %d/4",
                                        acct.state.name, micro_symbol,
                                        acct.state.trading_days + 1)
-                            result = conn.open_position(
+                            result = conn.place_market_order(
                                 micro_symbol, "BUY", 0.01,
                                 sl=0.0, tp=None,
                                 comment="micro-op-min-days")
@@ -1022,22 +1028,10 @@ def main():
                             logger.warning("[%s] Execution failed for %s — "
                                           "signal consumed (no retry)",
                                           acct_name, order["combo"])
-                            telegram.notify_trade_opened(
-                                acct.state.name, order["direction"], order["combo"],
-                                order["volume"], result["price"],
-                                order["sl"], order["tp"], acct.state.state)
-                            save_trade_log({
-                                "account": acct_name,
-                                "combo": order["combo"],
-                                "direction": order["direction"],
-                                "symbol": order["symbol"],
-                                "volume": order["volume"],
-                                "sl": order["sl"],
-                                "tp": order["tp"],
-                                "fill_price": result["price"],
-                                "ticket": result["ticket"],
-                                "state": acct.state.state,
-                            })
+                            telegram.send(
+                                f"\u26a0\ufe0f <b>EXEC FAIL</b> {acct.state.name}\n"
+                                f"{order['combo']} {order['direction']} — signal consumed"
+                            )
 
                     # Sync equity after execution
                     info = conn.get_account_info()

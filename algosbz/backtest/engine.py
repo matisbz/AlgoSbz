@@ -101,6 +101,15 @@ class BacktestEngine:
             if pending_signal is not None:
                 sig = pending_signal
                 pending_signal = None
+                # Use execution bar's timestamp, not the signal bar's
+                sig = Signal(
+                    action=sig.action,
+                    symbol=sig.symbol,
+                    timestamp=timestamp,
+                    stop_loss=sig.stop_loss,
+                    take_profit=sig.take_profit,
+                    metadata=sig.metadata,
+                )
 
                 if sig.action == SignalAction.EXIT and broker.has_position:
                     closing_trades = broker.close_all_positions(

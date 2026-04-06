@@ -206,20 +206,43 @@ class SimulatedBroker:
             tp_hit = pos.take_profit is not None and (bar["low"] + spread / 2) <= pos.take_profit
 
         if sl_hit and tp_hit:
+            bar_open = bar["open"]
             if self.pessimistic_fills:
-                exit_price = pos.stop_loss + slippage * (1 if is_long else -1)
+                if is_long:
+                    gap_price = bar_open - spread / 2
+                    exit_price = min(gap_price, pos.stop_loss) - slippage
+                else:
+                    gap_price = bar_open + spread / 2
+                    exit_price = max(gap_price, pos.stop_loss) + slippage
                 return (exit_price, ExitReason.STOP_LOSS)
             else:
-                exit_price = pos.take_profit - slippage * (1 if is_long else -1)
+                if is_long:
+                    gap_price = bar_open - spread / 2
+                    exit_price = max(gap_price, pos.take_profit) - slippage
+                else:
+                    gap_price = bar_open + spread / 2
+                    exit_price = min(gap_price, pos.take_profit) + slippage
                 return (exit_price, ExitReason.TAKE_PROFIT)
 
         if sl_hit:
-            # SL fill with adverse slippage
-            exit_price = pos.stop_loss - slippage if is_long else pos.stop_loss + slippage
+            # Gap check: if bar opens beyond SL, fill at open (worse) not SL
+            bar_open = bar["open"]
+            if is_long:
+                gap_price = bar_open - spread / 2  # BID at open
+                exit_price = min(gap_price, pos.stop_loss) - slippage
+            else:
+                gap_price = bar_open + spread / 2  # ASK at open
+                exit_price = max(gap_price, pos.stop_loss) + slippage
             return (exit_price, ExitReason.STOP_LOSS)
         if tp_hit:
-            # TP fill with adverse slippage
-            exit_price = pos.take_profit - slippage if is_long else pos.take_profit + slippage
+            # Gap check: if bar opens beyond TP, fill at open (better)
+            bar_open = bar["open"]
+            if is_long:
+                gap_price = bar_open - spread / 2
+                exit_price = max(gap_price, pos.take_profit) - slippage
+            else:
+                gap_price = bar_open + spread / 2
+                exit_price = min(gap_price, pos.take_profit) + slippage
             return (exit_price, ExitReason.TAKE_PROFIT)
 
         return None

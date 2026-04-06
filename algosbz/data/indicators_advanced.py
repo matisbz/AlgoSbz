@@ -13,18 +13,22 @@ from algosbz.data.indicators import atr, ema
 def swing_points(
     high: pd.Series, low: pd.Series, left: int = 5, right: int = 5
 ) -> pd.DataFrame:
-    """Detect swing highs and swing lows using left/right bar comparison."""
+    """Detect swing highs and swing lows using left/right bar comparison.
+
+    Swings are marked at the confirmation bar (i + right), not at the pivot bar,
+    to avoid look-ahead bias. The stored value is still the pivot price.
+    """
     n = len(high)
     swing_high = pd.Series(np.nan, index=high.index)
     swing_low = pd.Series(np.nan, index=low.index)
 
     for i in range(left, n - right):
-        # Swing high: highest in [i-left, i+right]
+        # Swing high: highest in [i-left, i+right], confirmed at i+right
         if high.iloc[i] == high.iloc[i - left: i + right + 1].max():
-            swing_high.iloc[i] = high.iloc[i]
-        # Swing low: lowest in [i-left, i+right]
+            swing_high.iloc[i + right] = high.iloc[i]
+        # Swing low: lowest in [i-left, i+right], confirmed at i+right
         if low.iloc[i] == low.iloc[i - left: i + right + 1].min():
-            swing_low.iloc[i] = low.iloc[i]
+            swing_low.iloc[i + right] = low.iloc[i]
 
     return pd.DataFrame({"swing_high": swing_high, "swing_low": swing_low}, index=high.index)
 
