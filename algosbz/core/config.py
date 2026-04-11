@@ -19,6 +19,7 @@ class RiskConfig(BaseModel):
     max_dd_limit: float = 0.09
     max_positions: int = 3
     daily_reset_hour: int = 0
+    daily_reset_timezone: str = "UTC"
     min_risk_reward: float = 1.0
 
 

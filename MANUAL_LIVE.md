@@ -160,8 +160,8 @@ El sistema:
 - **Gestion de fases**: P1 (10% target) → P2 (5% target) → Funded
 - **Risk management**: Anti-martingale, daily cap, cooldown por combo
 - **Rotacion de cuentas**: Login/logout automatico para ver posiciones de cada cuenta
-- **Persistencia**: Estado guardado en `data/live_state.json` (sobrevive a reinicios)
-- **Trade log**: Cada operacion en `data/trade_history.jsonl`
+- **Persistencia**: Estado guardado en `data/live_state.json` con reconciliacion obligatoria contra MT5 al arrancar
+- **Trade log**: Aperturas/cierres en `data/trade_history.jsonl` con eventos estructurados para el validador
 
 ### Lo que NO Hace
 

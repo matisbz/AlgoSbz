@@ -42,7 +42,7 @@ from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 logging.basicConfig(level=logging.ERROR)
 
-from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -204,7 +204,7 @@ def compute_daily_regime(data_dict):
 
 def simulate_exam(streams, combo_names, start_date,
                   daily_loss_cap_pct=3.0, combo_daily_max_losses=1,
-                  p2_risk_factor=1.0,
+                  p1_risk_factor=1.0, p2_risk_factor=1.0,
                   max_instr_per_day=99, max_daily_losses=99,
                   regime_data=None, regime_threshold=90,
                   initial=100000, p1_days=30, p2_days=60):
@@ -370,7 +370,7 @@ def simulate_exam(streams, combo_names, start_date,
                 "trading_days": len(trading_days), "days_used": days_used}
 
     # ── Phase 1: start at $100K, target +10% ──
-    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=1.0)
+    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=p1_risk_factor)
     if p1["outcome"] != "PASS":
         return {"exam": "FAIL_P1", "p1": p1, "p2": None}
 
@@ -405,6 +405,20 @@ def main():
             print(f"  {sym}: {len(data_dict[sym]):,} bars (→ {last.date()})")
         except Exception as e:
             print(f"  {sym}: FAILED - {e}")
+
+    # ── Spread realism floor: parquet spreads (Darwinex) often understate
+    # FTMO real spreads. Override bar['spread'] with max(bar_spread, floor)
+    # where floor = instrument.default_spread_pips * pip_size (measured live).
+    print("\n  Applying realistic spread floor (FTMO measurements)...")
+    for sym, df in data_dict.items():
+        if "spread" not in df.columns:
+            continue
+        instr = instruments[sym]
+        floor = instr.default_spread_pips * instr.pip_size
+        before_mean = df["spread"].mean()
+        df["spread"] = df["spread"].clip(lower=floor)
+        after_mean = df["spread"].mean()
+        print(f"    {sym}: floor={floor:.5f} | mean spread {before_mean:.5f} -> {after_mean:.5f}")
 
     # ── Step 1: Pre-compute at direct 2% ──
     streams = precompute_trades(config, instruments, data_dict, pool, risk_pct=0.02)
@@ -461,8 +475,8 @@ def main():
             d = greedy_decorrelated_deck(streams, corr, size, active_pool)
             decks[f"Decorr{size}_A"] = d
 
-    decks["Robust_All"] = robust
-    decks["Full_All"] = active_pool
+    # v5 (2026-04-08): Full_All / Robust_All decks REMOVED — they overfit on IS
+    # (65.4% IS / 28.6% OOS, +36.8pp gap). Only decorrelated decks are considered.
 
     for name, combo_list in decks.items():
         syms = set(ALL_COMBOS[c]["symbol"] for c in combo_list)
@@ -488,19 +502,21 @@ def main():
     for daily_cap in [2.0, 2.5, 3.0, 3.5, 4.0]:
         for cooldown in [1, 2]:
             for lookback in [0, 6]:
-                for p2_rf in [0.7, 0.5]:
-                    for max_instr in [2, 3, 99]:
-                        for max_losses in [3, 5, 99]:
-                            for regime in [0, 90]:
-                                grid_params.append({
-                                    "daily_cap": daily_cap,
-                                    "cooldown": cooldown,
-                                    "lookback": lookback,
-                                    "p2_rf": p2_rf,
-                                    "max_instr": max_instr,
-                                    "max_losses": max_losses,
-                                    "regime": regime,
-                                })
+                for p1_rf in [1.0, 1.25]:
+                    for p2_rf in [1.0, 0.7, 0.5]:
+                        for max_instr in [2, 3, 99]:
+                            for max_losses in [3, 5, 99]:
+                                for regime in [0, 90]:
+                                    grid_params.append({
+                                        "daily_cap": daily_cap,
+                                        "cooldown": cooldown,
+                                        "lookback": lookback,
+                                        "p1_rf": p1_rf,
+                                        "p2_rf": p2_rf,
+                                        "max_instr": max_instr,
+                                        "max_losses": max_losses,
+                                        "regime": regime,
+                                    })
 
     total_sims = len(decks) * len(grid_params) * (len(is_windows) + len(oos_windows))
     print(f"  {len(decks)} decks × {len(grid_params)} control configs = "
@@ -542,6 +558,7 @@ def main():
                         streams, active, start,
                         daily_loss_cap_pct=gp["daily_cap"],
                         combo_daily_max_losses=gp["cooldown"],
+                        p1_risk_factor=gp["p1_rf"],
                         p2_risk_factor=gp["p2_rf"],
                         max_instr_per_day=gp["max_instr"],
                         max_daily_losses=gp["max_losses"],
@@ -565,14 +582,16 @@ def main():
             oos_rate = oos_funded / oos_n * 100 if oos_n else 0
 
             regime_tag = f"_RG{gp['regime']}" if gp["regime"] > 0 else ""
+            p1_tag = f"_P1x{gp['p1_rf']}" if gp["p1_rf"] != 1.0 else ""
             label = (f"{deck_name}_DC{gp['daily_cap']}_CD{gp['cooldown']}"
-                     f"_L{gp['lookback']}_P2x{gp['p2_rf']}"
+                     f"_L{gp['lookback']}{p1_tag}_P2x{gp['p2_rf']}"
                      f"_MI{gp['max_instr']}_ML{gp['max_losses']}{regime_tag}")
 
             results.append({
                 "deck": deck_name, "label": label,
                 "daily_cap": gp["daily_cap"], "cooldown": gp["cooldown"],
-                "lookback": gp["lookback"], "p2_rf": gp["p2_rf"],
+                "lookback": gp["lookback"],
+                "p1_rf": gp["p1_rf"], "p2_rf": gp["p2_rf"],
                 "max_instr": gp["max_instr"], "max_losses": gp["max_losses"],
                 "regime": gp["regime"],
                 "n_combos": len(combo_list),
@@ -657,6 +676,7 @@ def main():
             streams, active, start,
             daily_loss_cap_pct=best["daily_cap"],
             combo_daily_max_losses=best["cooldown"],
+            p1_risk_factor=best.get("p1_rf", 1.0),
             p2_risk_factor=best["p2_rf"],
             max_instr_per_day=best.get("max_instr", 99),
             max_daily_losses=best.get("max_losses", 99),
@@ -698,6 +718,7 @@ def main():
                 streams, active, start,
                 daily_loss_cap_pct=best["daily_cap"],
                 combo_daily_max_losses=best["cooldown"],
+                p1_risk_factor=best.get("p1_rf", 1.0),
                 p2_risk_factor=best["p2_rf"],
                 max_instr_per_day=best.get("max_instr", 99),
                 max_daily_losses=best.get("max_losses", 99),
@@ -760,6 +781,7 @@ def main():
             r = simulate_exam(streams, active, start,
                               daily_loss_cap_pct=best["daily_cap"],
                               combo_daily_max_losses=best["cooldown"],
+                              p1_risk_factor=best.get("p1_rf", 1.0),
                               p2_risk_factor=best["p2_rf"],
                               max_instr_per_day=best.get("max_instr", 99),
                               max_daily_losses=best.get("max_losses", 99),

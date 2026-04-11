@@ -20,7 +20,8 @@
       "Bash(xargs -I {} basename {} .py)",
       "Bash(ls -lthS /c/Users/mateo/Desktop/Proyectos/AlgoSbz/scripts/*.py)",
       "Bash(xargs basename:*)",
-      "Bash(grep \"module.*algosbz\\\\.strategy\" /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/dashboard/pages/*.py)"
+      "Bash(grep \"module.*algosbz\\\\.strategy\" /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/dashboard/pages/*.py)",
+      "Bash(python -X utf8)"
     ]
   }
 }

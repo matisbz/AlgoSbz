@@ -5,7 +5,7 @@ Each account gets its own connector instance.
 MT5 limitation: only one terminal login at a time, so we rotate accounts.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import pandas as pd
@@ -230,7 +230,7 @@ class MT5Connector:
                     "tp": pos.tp,
                     "profit": pos.profit,
                     "comment": pos.comment,
-                    "time": datetime.fromtimestamp(pos.time),
+                    "time": datetime.fromtimestamp(pos.time, tz=timezone.utc),
                 })
         return our_positions
 

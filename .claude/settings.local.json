@@ -13,7 +13,11 @@
       "Bash(xargs ls:*)",
       "Bash(python -c \"import scripts.optimize_deck; print\\('Syntax OK'\\)\")",
       "Bash(python -c \"from scripts.challenge_decks import ALL_COMBOS; print\\(f'{len\\(ALL_COMBOS\\)} combos total'\\); ndaq = [k for k in ALL_COMBOS if 'NDAQ' in k]; print\\(f'NDAQ combos: {len\\(ndaq\\)} - {ndaq}'\\); h1_new = [k for k in ALL_COMBOS if k.endswith\\('_H1'\\) and ALL_COMBOS[k]['tier']=='NEW']; print\\(f'New H1 variants: {len\\(h1_new\\)} - {h1_new}'\\)\")",
-      "Bash(python -u -X utf8 scripts/production_sim.py)"
+      "Bash(python -u -X utf8 scripts/production_sim.py)",
+      "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
+      "Bash(python scripts/optimize_deck.py)",
+      "Bash(tee /tmp/opt_run.log)",
+      "Bash(ls -la *.output)"
     ]
   }
 }

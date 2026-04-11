@@ -33,6 +33,7 @@ from algosbz.core.models import Signal
 from algosbz.data.resampler import resample
 from algosbz.backtest.engine import BacktestEngine
 from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
+from algosbz.live.runtime import ensure_aware_utc, utc_now
 
 from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
 
@@ -44,15 +45,16 @@ TRADE_LOG = Path(__file__).resolve().parent.parent / "data" / "trade_history.jso
 
 
 def load_live_trades(days: int = None) -> list[dict]:
-    """Load trades from the live trade log."""
+    """Load entry events from the live trade log."""
     if not TRADE_LOG.exists():
         logger.error("No trade log found at %s", TRADE_LOG)
         return []
 
     trades = []
+    ignored = 0
     cutoff = None
     if days:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = ensure_aware_utc(utc_now() - timedelta(days=days)).replace(tzinfo=None)
 
     with open(TRADE_LOG, "r", encoding="utf-8") as f:
         for line in f:
@@ -61,11 +63,28 @@ def load_live_trades(days: int = None) -> list[dict]:
                 continue
             t = json.loads(line)
             ts = datetime.fromisoformat(t["ts"])
+            if ts.tzinfo is not None:
+                ts = ensure_aware_utc(ts).replace(tzinfo=None)
             if cutoff and ts < cutoff:
                 continue
+            event = t.get("event")
+            direction = t.get("direction")
+
+            is_entry_event = event in {"OPEN", "OPEN_RECOVERED"}
+            is_legacy_entry = event is None and direction in {"BUY", "SELL"}
+            if not (is_entry_event or is_legacy_entry):
+                ignored += 1
+                continue
+
+            if t.get("fill_price", 0.0) in (0, 0.0, None):
+                ignored += 1
+                continue
+
             t["_ts"] = ts
             trades.append(t)
 
+    if ignored:
+        logger.info("Ignored %d non-entry/invalid log events", ignored)
     return trades
 
 
@@ -142,7 +161,6 @@ def main():
         cfg = yaml.safe_load(f)
 
     symbol_map = cfg.get("symbol_map", {})
-    deck = cfg["deck"]
     app_config = load_config()
     instruments = load_all_instruments()
 
@@ -166,13 +184,18 @@ def main():
 
     logger.info("Date range: %s → %s", start_date.date(), end_date.date())
 
+    trade_combos = sorted(c for c in live_by_combo if c in ALL_COMBOS)
+    if not trade_combos:
+        logger.error("No logged combos map to current combo registry.")
+        return
+
     # Load data — MT5 by default (live trades only exist when MT5 is available)
     # --offline fallback only works if local data covers the live period
     if args.offline:
         from algosbz.data.loader import DataLoader
         loader = DataLoader()
         data_dict = {}
-        all_symbols = list({ALL_COMBOS[c]["symbol"] for c in deck})
+        all_symbols = list({ALL_COMBOS[c]["symbol"] for c in trade_combos})
         for sym in all_symbols:
             try:
                 data_dict[sym] = loader.load(sym, start=str(start_date.date()),
@@ -181,7 +204,10 @@ def main():
                 logger.warning("Failed to load %s: %s", sym, e)
     else:
         from algosbz.live.mt5_connector import MT5Connector
-        first_acct = cfg["accounts"][0]
+        first_acct = next(
+            acct for acct in cfg["accounts"]
+            if acct.get("enabled", True) and acct.get("login", 0) != 0
+        )
         conn = MT5Connector(first_acct["login"], first_acct["password"],
                            first_acct["server"], symbol_map)
         if not conn.connect():
@@ -189,7 +215,7 @@ def main():
             return
 
         data_dict = {}
-        all_symbols = list({ALL_COMBOS[c]["symbol"] for c in deck})
+        all_symbols = list({ALL_COMBOS[c]["symbol"] for c in trade_combos})
         for sym in all_symbols:
             # Get enough bars to cover the period
             for tf in ["M15", "H1", "H4"]:
@@ -209,9 +235,7 @@ def main():
     total_live_only = 0
     total_bt_only = 0
 
-    combos_with_trades = [c for c in deck if c in live_by_combo]
-
-    for combo in combos_with_trades:
+    for combo in trade_combos:
         sym = ALL_COMBOS[combo]["symbol"]
         if sym not in data_dict:
             logger.warning("No data for %s (%s), skipping", combo, sym)
@@ -297,28 +321,6 @@ def main():
             total_bt_only += 1
             print(f"    [BT ONLY  ] {bt['fill_bar']} {bt['action'][:5]} "
                   f"SL={bt['sl']:.5f} (not taken in live)")
-
-    # Also check combos with backtest signals but NO live trades
-    for combo in deck:
-        if combo in live_by_combo:
-            continue
-        sym = ALL_COMBOS[combo]["symbol"]
-        if sym not in data_dict:
-            continue
-
-        bt_signals = run_backtest_signals(combo, data_dict[sym],
-                                          app_config, instruments[sym])
-        # Filter to live period
-        if all_dates:
-            bt_in_period = [s for s in bt_signals
-                            if min(all_dates) - timedelta(hours=12) <= s["fill_bar"] <= max(all_dates) + timedelta(hours=12)]
-            if bt_in_period:
-                print(f"\n  {combo}: 0 live trades, {len(bt_in_period)} backtest signals (MISSED)")
-                total_bt_only += len(bt_in_period)
-                for bt in bt_in_period[:5]:
-                    print(f"    [MISSED   ] {bt['fill_bar']} {bt['action'][:5]} SL={bt['sl']:.5f}")
-                if len(bt_in_period) > 5:
-                    print(f"    ... and {len(bt_in_period) - 5} more")
 
     # Summary
     print(f"\n{'='*100}")

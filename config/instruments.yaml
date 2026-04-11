@@ -10,7 +10,7 @@ GBPJPY:
   pip_size: 0.01
   point_size: 0.001
   pip_value_per_lot: 6.7
-  default_spread_pips: 2.5
+  default_spread_pips: 3.0
   min_lot: 0.01
   max_lot: 100.0
 
@@ -34,7 +34,7 @@ XAUUSD:
   pip_size: 0.1
   point_size: 0.01
   pip_value_per_lot: 10.0
-  default_spread_pips: 3.0
+  default_spread_pips: 6.0
   min_lot: 0.01
   max_lot: 100.0
 
@@ -42,7 +42,7 @@ XTIUSD:
   pip_size: 0.01
   point_size: 0.001
   pip_value_per_lot: 1.0
-  default_spread_pips: 3.0
+  default_spread_pips: 9.0
   min_lot: 0.01
   max_lot: 100.0
 
@@ -50,22 +50,59 @@ XNGUSD:
   pip_size: 0.001
   point_size: 0.0001
   pip_value_per_lot: 1.0
-  default_spread_pips: 5.0
+  default_spread_pips: 60.0
   min_lot: 0.01
   max_lot: 100.0
 
 SPY:
   pip_size: 0.01
   point_size: 0.01
-  pip_value_per_lot: 1.0
-  default_spread_pips: 1.0
+  pip_value_per_lot: 0.01
+  default_spread_pips: 56.0
   min_lot: 0.01
   max_lot: 100.0
 
 NDAQ:
   pip_size: 0.01
   point_size: 0.01
-  pip_value_per_lot: 1.0
-  default_spread_pips: 2.0
+  pip_value_per_lot: 0.01
+  default_spread_pips: 172.0
+  min_lot: 0.01
+  max_lot: 100.0
+
+# ── New instruments downloaded from Dukascopy 2026-04-08 ────────────
+# Spread floors estimated from FTMO published averages for major pairs.
+# These are conservative defaults; the spread floor in massive_scan will
+# enforce them on the parquet data (Dukascopy CSVs ship with spread=0).
+
+AUDUSD:
+  pip_size: 0.0001
+  point_size: 0.00001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 1.2
+  min_lot: 0.01
+  max_lot: 100.0
+
+NZDUSD:
+  pip_size: 0.0001
+  point_size: 0.00001
+  pip_value_per_lot: 10.0
+  default_spread_pips: 1.5
+  min_lot: 0.01
+  max_lot: 100.0
+
+USDCAD:
+  pip_size: 0.0001
+  point_size: 0.00001
+  pip_value_per_lot: 7.5
+  default_spread_pips: 1.3
+  min_lot: 0.01
+  max_lot: 100.0
+
+EURJPY:
+  pip_size: 0.01
+  point_size: 0.001
+  pip_value_per_lot: 6.7
+  default_spread_pips: 2.5  # FTMO observed: median 1.2 / p95 3.6 (2025-11/12 sample)
   min_lot: 0.01
   max_lot: 100.0

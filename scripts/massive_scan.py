@@ -37,6 +37,14 @@ STRATEGIES = {
             "tight_H1": {"timeframe": "H1", "bb_std": 2.0, "consec_outside": 1, "sl_atr_mult": 2.0, "tp_atr_mult": 3.0},
             "wide_H1": {"timeframe": "H1", "bb_std": 3.0, "consec_outside": 3, "sl_atr_mult": 4.0, "tp_atr_mult": 5.0},
             "tight_H4": {"timeframe": "H4", "bb_std": 2.0, "consec_outside": 1, "sl_atr_mult": 2.0, "tp_atr_mult": 3.0},
+            # Spread-resistant: wide TP, longer hold ↑ R:R, fewer trades but big edge per trade
+            "wideR_H4": {"timeframe": "H4", "bb_std": 2.5, "consec_outside": 2, "sl_atr_mult": 2.5, "tp_atr_mult": 5.0},
+            "wideR_H1": {"timeframe": "H1", "bb_std": 2.5, "consec_outside": 2, "sl_atr_mult": 2.5, "tp_atr_mult": 5.0},
+            # Session-filtered: London (7-16) and NY (12-21) — filters out low-vol Asian noise
+            "default_H1_lon": {"timeframe": "H1", "session_start": 7, "session_end": 16},
+            "default_H1_ny":  {"timeframe": "H1", "session_start": 12, "session_end": 21},
+            "wideR_H1_lon":   {"timeframe": "H1", "bb_std": 2.5, "consec_outside": 2, "sl_atr_mult": 2.5, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
+            "wideR_H4_ny":    {"timeframe": "H4", "bb_std": 2.5, "consec_outside": 2, "sl_atr_mult": 2.5, "tp_atr_mult": 5.0, "session_start": 12, "session_end": 21},
         },
     },
     "TPB": {
@@ -47,6 +55,16 @@ STRATEGIES = {
             "default_H4": {"timeframe": "H4"},
             "loose_H1": {"timeframe": "H1", "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
             "loose_H4": {"timeframe": "H4", "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0},
+            "wideR_H4": {"timeframe": "H4", "adx_min": 25, "pullback_zone_atr": 0.6, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "trend_H4": {"timeframe": "H4", "adx_min": 28, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            # Session-filtered variants of the working presets
+            "loose_H4_lon": {"timeframe": "H4", "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0, "session_start": 7, "session_end": 16},
+            "loose_H4_ny":  {"timeframe": "H4", "adx_min": 20, "pullback_zone_atr": 0.7, "sl_atr_mult": 2.5, "tp_atr_mult": 4.0, "session_start": 12, "session_end": 21},
+            "wideR_H4_lon": {"timeframe": "H4", "adx_min": 25, "pullback_zone_atr": 0.6, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
+            "trend_H4_lon": {"timeframe": "H4", "adx_min": 28, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0, "session_start": 7, "session_end": 16},
+            "trend_H4_ny":  {"timeframe": "H4", "adx_min": 28, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0, "session_start": 12, "session_end": 21},
+            # Aggressive trend variant — lower ADX, higher TP
+            "trendL_H4": {"timeframe": "H4", "adx_min": 22, "sl_atr_mult": 2.5, "tp_atr_mult": 7.0},
         },
     },
     "SwBrk": {
@@ -58,6 +76,7 @@ STRATEGIES = {
             "fast_H4": {"timeframe": "H4", "donchian_period": 10, "squeeze_pct": 0.85, "adx_min": 15},
             "slow_H4": {"timeframe": "H4", "donchian_period": 30, "squeeze_pct": 0.75, "tp_atr_mult": 4.0},
             "fast_H1": {"timeframe": "H1", "donchian_period": 10, "squeeze_pct": 0.85, "adx_min": 15},
+            "wideR_H4": {"timeframe": "H4", "donchian_period": 25, "squeeze_pct": 0.80, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
         },
     },
     "IBB": {
@@ -68,6 +87,10 @@ STRATEGIES = {
             "default_H1": {"timeframe": "H1"},
             "multi_H4": {"timeframe": "H4", "min_inside_bars": 2, "tp_atr_mult": 4.0},
             "loose_H4": {"timeframe": "H4", "min_bar_range_pct": 0.2, "sl_atr_mult": 2.0, "tp_atr_mult": 4.0},
+            # Spread-resistant variants
+            "wideR_H4": {"timeframe": "H4", "min_inside_bars": 1, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "trend_H4": {"timeframe": "H4", "min_inside_bars": 2, "trend_ema": 100, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            "wideR_H4_lon": {"timeframe": "H4", "min_inside_bars": 1, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
         },
     },
     "Engulf": {
@@ -79,6 +102,14 @@ STRATEGIES = {
             "wide_H4": {"timeframe": "H4", "swing_zone_atr": 0.8, "adx_max": 35, "min_body_ratio": 0.5},
             "tight_H4": {"timeframe": "H4", "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0},
             "wide_H1": {"timeframe": "H1", "swing_zone_atr": 0.8, "adx_max": 35, "min_body_ratio": 0.5},
+            "wideR_H4": {"timeframe": "H4", "swing_zone_atr": 0.4, "min_body_ratio": 0.7, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            # Session-filtered variants
+            "tight_H4_lon": {"timeframe": "H4", "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0, "session_start": 7, "session_end": 16},
+            "tight_H4_ny":  {"timeframe": "H4", "swing_zone_atr": 0.3, "min_body_ratio": 0.7, "tp_atr_mult": 3.0, "session_start": 12, "session_end": 21},
+            "wideR_H4_lon": {"timeframe": "H4", "swing_zone_atr": 0.4, "min_body_ratio": 0.7, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
+            "wideR_H4_ny":  {"timeframe": "H4", "swing_zone_atr": 0.4, "min_body_ratio": 0.7, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 12, "session_end": 21},
+            # Aggressive — wider TP, stronger body filter
+            "trend_H4": {"timeframe": "H4", "swing_zone_atr": 0.4, "min_body_ratio": 0.8, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
         },
     },
     "StrBrk": {
@@ -89,6 +120,12 @@ STRATEGIES = {
             "default_H4": {"timeframe": "H4"},
             "fast_H1": {"timeframe": "H1", "swing_lookback": 3, "min_swing_distance_atr": 0.3, "tp_atr_mult": 2.5},
             "slow_H4": {"timeframe": "H4", "swing_lookback": 7, "tp_atr_mult": 4.0},
+            "wideR_H4": {"timeframe": "H4", "swing_lookback": 6, "sl_atr_mult": 2.0, "tp_atr_mult": 5.5},
+            # Session variants of the working preset
+            "wideR_H4_lon": {"timeframe": "H4", "swing_lookback": 6, "sl_atr_mult": 2.0, "tp_atr_mult": 5.5, "session_start": 7, "session_end": 16},
+            "wideR_H4_ny":  {"timeframe": "H4", "swing_lookback": 6, "sl_atr_mult": 2.0, "tp_atr_mult": 5.5, "session_start": 12, "session_end": 21},
+            # Trend variant — longer swing lookback, ultra-wide TP
+            "trend_H4": {"timeframe": "H4", "swing_lookback": 8, "sl_atr_mult": 2.5, "tp_atr_mult": 6.5},
         },
     },
     "MomDiv": {
@@ -99,6 +136,10 @@ STRATEGIES = {
             "default_H1": {"timeframe": "H1"},
             "loose_H4": {"timeframe": "H4", "min_rsi_diff": 2, "divergence_window": 40, "swing_lookback": 3},
             "loose_H1": {"timeframe": "H1", "min_rsi_diff": 2, "divergence_window": 40, "swing_lookback": 3},
+            # Spread-resistant: stronger divergence required, wider TP
+            "wideR_H4": {"timeframe": "H4", "min_rsi_diff": 5, "divergence_window": 30, "swing_lookback": 5, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "trend_H4": {"timeframe": "H4", "min_rsi_diff": 7, "divergence_window": 25, "swing_lookback": 6, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            "wideR_H1": {"timeframe": "H1", "min_rsi_diff": 4, "divergence_window": 35, "swing_lookback": 4, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
         },
     },
     "RegVMR": {
@@ -109,6 +150,9 @@ STRATEGIES = {
             "default_H4": {"timeframe": "H4"},
             "tight_H1": {"timeframe": "H1", "bb_std": 2.0, "consec_outside": 1},
             "wide_H1": {"timeframe": "H1", "bb_std": 3.0, "consec_outside": 3},
+            "default_H1_lon": {"timeframe": "H1", "session_start": 7, "session_end": 16},
+            "default_H1_ny":  {"timeframe": "H1", "session_start": 12, "session_end": 21},
+            "tight_H1_lon":   {"timeframe": "H1", "bb_std": 2.0, "consec_outside": 1, "session_start": 7, "session_end": 16},
         },
     },
     "EMArib": {
@@ -120,28 +164,15 @@ STRATEGIES = {
             "loose_H1": {"timeframe": "H1", "ribbon_threshold": 0.5, "ribbon_confirm_bars": 2, "rsi_pullback_bull": 50, "rsi_pullback_bear": 50},
             "loose_H4": {"timeframe": "H4", "ribbon_threshold": 0.5, "ribbon_confirm_bars": 2, "rsi_pullback_bull": 50, "rsi_pullback_bear": 50},
             "tight_H1": {"timeframe": "H1", "ribbon_threshold": 0.9, "ribbon_confirm_bars": 5},
+            # Spread-resistant
+            "wideR_H4": {"timeframe": "H4", "ribbon_threshold": 0.7, "ribbon_confirm_bars": 3, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "trend_H4": {"timeframe": "H4", "ribbon_threshold": 0.85, "ribbon_confirm_bars": 4, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            "trend_H4_lon": {"timeframe": "H4", "ribbon_threshold": 0.85, "ribbon_confirm_bars": 4, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0, "session_start": 7, "session_end": 16},
         },
     },
-    "SessBrk": {
-        "module": "algosbz.strategy.session_breakout_v2",
-        "class": "SessionBreakout",
-        "presets": {
-            "default_M15": {"timeframe": "M15"},
-            "tight_M15": {"timeframe": "M15", "min_range_atr": 0.5, "max_range_atr": 2.0, "tp_atr_mult": 3.0},
-            "wide_M15": {"timeframe": "M15", "min_range_atr": 0.2, "max_range_atr": 3.0, "sl_atr_mult": 1.5},
-        },
-    },
-    "SMCOB": {
-        "module": "algosbz.strategy.smc_order_block",
-        "class": "SMCOrderBlock",
-        "presets": {
-            "default_H1": {"timeframe": "H1"},
-            "default_H4": {"timeframe": "H4"},
-            "loose_H1": {"timeframe": "H1", "rejection_wick_ratio": 0.4, "tp_atr_mult": 2.5},
-            "loose_H4": {"timeframe": "H4", "rejection_wick_ratio": 0.4, "tp_atr_mult": 2.5},
-            "tight_H1": {"timeframe": "H1", "rejection_wick_ratio": 0.6, "sl_atr_mult": 1.0, "tp_atr_mult": 2.0},
-        },
-    },
+    # SessBrk dropped — M15 timeframe spreads are unworkable on FTMO
+    # SMCOB dropped — confirmed look-ahead bias in indicators_advanced.swing_points
+
     "FVGrev": {
         "module": "algosbz.strategy.fvg_reversion",
         "class": "FVGReversion",
@@ -151,21 +182,78 @@ STRATEGIES = {
             "tight_H1": {"timeframe": "H1", "min_gap_atr_ratio": 0.5, "trend_strength_max": 15},
             "tight_H4": {"timeframe": "H4", "min_gap_atr_ratio": 0.5, "trend_strength_max": 15},
             "loose_H1": {"timeframe": "H1", "min_gap_atr_ratio": 0.2, "trend_strength_max": 35, "tp_atr_mult": 3.0},
+            # Spread-resistant: bigger gaps required, wider TP
+            "wideR_H4": {"timeframe": "H4", "min_gap_atr_ratio": 0.5, "trend_strength_max": 20, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "wideR_H1": {"timeframe": "H1", "min_gap_atr_ratio": 0.5, "trend_strength_max": 20, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
         },
     },
     "VWAPrev": {
         "module": "algosbz.strategy.vwap_reversion",
         "class": "VWAPReversion",
         "presets": {
-            "default_M15": {"timeframe": "M15"},
             "default_H1": {"timeframe": "H1"},
-            "wide_M15": {"timeframe": "M15", "deviation_atr": 0.3, "tp_atr_mult": 2.0},
             "nokz_H1": {"timeframe": "H1", "require_kill_zone": False, "deviation_atr": 0.7, "tp_atr_mult": 2.0},
+            # Spread-resistant: H1/H4 only (M15 is hopeless), wider deviation + TP
+            "wideR_H1": {"timeframe": "H1", "require_kill_zone": False, "deviation_atr": 1.0, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "wideR_H4": {"timeframe": "H4", "require_kill_zone": False, "deviation_atr": 1.0, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+        },
+    },
+    "MACross": {
+        "module": "algosbz.strategy.ma_crossover",
+        "class": "MACrossover",
+        "presets": {
+            "default_H4": {"timeframe": "H4"},
+            "default_H1": {"timeframe": "H1"},
+            "fast_H4": {"timeframe": "H4", "fast_period": 5, "slow_period": 13, "adx_min": 18},
+            "wideR_H4": {"timeframe": "H4", "fast_period": 8, "slow_period": 21, "adx_min": 25, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "trend_H4": {"timeframe": "H4", "fast_period": 12, "slow_period": 34, "adx_min": 25, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            # Session-filtered (the working presets only)
+            "wideR_H4_lon": {"timeframe": "H4", "fast_period": 8, "slow_period": 21, "adx_min": 25, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
+            "wideR_H4_ny":  {"timeframe": "H4", "fast_period": 8, "slow_period": 21, "adx_min": 25, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 12, "session_end": 21},
+            "trend_H4_lon": {"timeframe": "H4", "fast_period": 12, "slow_period": 34, "adx_min": 25, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0, "session_start": 7, "session_end": 16},
+            "trend_H4_ny":  {"timeframe": "H4", "fast_period": 12, "slow_period": 34, "adx_min": 25, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0, "session_start": 12, "session_end": 21},
+            # Aggressive trend — even slower MA, ultra-wide TP
+            "megaT_H4": {"timeframe": "H4", "fast_period": 21, "slow_period": 55, "adx_min": 22, "sl_atr_mult": 2.5, "tp_atr_mult": 7.0},
+        },
+    },
+    "RSIext": {
+        "module": "algosbz.strategy.rsi_extreme",
+        "class": "RSIExtreme",
+        "presets": {
+            "default_H4": {"timeframe": "H4"},
+            "default_H1": {"timeframe": "H1"},
+            "tight_H4": {"timeframe": "H4", "rsi_oversold": 15, "rsi_overbought": 85, "tp_atr_mult": 3.5},
+            "wideR_H4": {"timeframe": "H4", "rsi_oversold": 20, "rsi_overbought": 80, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            # New: extreme thresholds + spread-resistant TP
+            "extreme_H4": {"timeframe": "H4", "rsi_oversold": 10, "rsi_overbought": 90, "sl_atr_mult": 2.0, "tp_atr_mult": 5.5},
+            "wideR_H1":   {"timeframe": "H1", "rsi_oversold": 20, "rsi_overbought": 80, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "calm_H4":    {"timeframe": "H4", "rsi_oversold": 25, "rsi_overbought": 75, "adx_max": 25, "sl_atr_mult": 2.5, "tp_atr_mult": 5.0},
+        },
+    },
+    "KeltSq": {
+        "module": "algosbz.strategy.keltner_squeeze",
+        "class": "KeltnerSqueeze",
+        "presets": {
+            "default_H4": {"timeframe": "H4"},
+            "default_H1": {"timeframe": "H1"},
+            "wideR_H4": {"timeframe": "H4", "squeeze_bars": 4, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "fast_H4": {"timeframe": "H4", "squeeze_bars": 2, "kc_atr_mult": 1.3},
+            # New: long squeeze hold, wide TP
+            "slow_H4":  {"timeframe": "H4", "squeeze_bars": 6, "sl_atr_mult": 2.5, "tp_atr_mult": 6.0},
+            "wideR_H1": {"timeframe": "H1", "squeeze_bars": 4, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0},
+            "wideR_H4_lon": {"timeframe": "H4", "squeeze_bars": 4, "sl_atr_mult": 2.0, "tp_atr_mult": 5.0, "session_start": 7, "session_end": 16},
         },
     },
 }
 
-INSTRUMENTS = ["EURUSD", "GBPJPY", "USDCHF", "USDJPY", "XAUUSD", "XTIUSD", "XNGUSD", "SPY", "NDAQ"]
+INSTRUMENTS = ["EURUSD", "GBPJPY", "USDCHF", "USDJPY", "XAUUSD", "XTIUSD",
+               # Added 2026-04-08 (Dukascopy, validated vs FTMO MT5: median Δ ≤ 0.4 pips)
+               "AUDUSD", "NZDUSD", "USDCAD", "EURJPY"]
+# Excluded after FTMO spread audit (2026-04-07):
+#   XNGUSD: 60 pips real spread (was 5 in parquet) — kills any short-TF setup
+#   SPY:    56 pips real spread (was 1) — same
+#   NDAQ:  172 pips real spread (was 2) — same
+# These need daily TF or trend-following with multi-day holds, out of scope here.
 
 PERIODS = [
     ("2015-01-01", "2016-12-31"),
@@ -185,7 +273,7 @@ def load_strategy(strat_key, preset_params):
 
 
 def run_backtest(config, instrument_cfg, data, strat_key, preset_params, symbol,
-                 spread_mult=1.0, min_trades=15):
+                 spread_mult=1.0, min_trades=12):
     cfg = deepcopy(config)
     cfg.risk.risk_per_trade = 0.02
     cfg.risk.daily_dd_limit = 0.049
@@ -195,6 +283,11 @@ def run_backtest(config, instrument_cfg, data, strat_key, preset_params, symbol,
         instrument_cfg = instrument_cfg.model_copy(update={
             "default_spread_pips": instrument_cfg.default_spread_pips * spread_mult
         })
+        # The broker uses bar['spread'] when present, so scale that too —
+        # otherwise the stress is a no-op once the realistic floor is applied.
+        if "spread" in data.columns:
+            data = data.copy()
+            data["spread"] = data["spread"] * spread_mult
 
     eq_cfg = EquityManagerConfig(
         dd_tiers=[(0.10, 1.0)],
@@ -287,6 +380,22 @@ def main():
             print(f"  {sym}: {len(data_cache[sym]):,} bars")
         except Exception as e:
             print(f"  {sym}: FAILED - {e}")
+
+    # Spread realism floor: parquet spreads (Darwinex) often understate FTMO
+    # real spreads. Override bar['spread'] with max(bar_spread, floor) where
+    # floor = instrument.default_spread_pips * pip_size (measured live on FTMO).
+    print("\nApplying realistic spread floor (FTMO measurements)...")
+    for sym, df in data_cache.items():
+        if "spread" not in df.columns:
+            continue
+        instr = instruments.get(sym)
+        if instr is None:
+            continue
+        floor = instr.default_spread_pips * instr.pip_size
+        before_mean = df["spread"].mean()
+        df["spread"] = df["spread"].clip(lower=floor)
+        after_mean = df["spread"].mean()
+        print(f"  {sym}: floor={floor:.5f} | mean spread {before_mean:.5f} -> {after_mean:.5f}")
 
     # ── PHASE 1: Quick PF filter ─────────────────────────────────────
     print(f"\n{'='*100}")
@@ -425,16 +534,42 @@ def main():
 
     # Save results
     Path("cache").mkdir(exist_ok=True)
+    import json
     rows = []
     for c in robust:
-        rows.append({**{k: v for k, v in c.items() if k != "params"}, "tier": "ROBUST"})
+        row = {k: v for k, v in c.items() if k != "params"}
+        row["params_json"] = json.dumps(c["params"])
+        row["tier"] = "ROBUST"
+        rows.append(row)
     for c in sensitivity_failed:
-        rows.append({**{k: v for k, v in c.items() if k != "params"}, "tier": "SPREAD_OK"})
+        row = {k: v for k, v in c.items() if k != "params"}
+        row["params_json"] = json.dumps(c["params"])
+        row["tier"] = "SPREAD_OK"
+        rows.append(row)
 
     if rows:
         df = pd.DataFrame(rows)
         df.to_csv("cache/massive_scan_results.csv", index=False)
         print(f"\n  Results saved to cache/massive_scan_results.csv")
+
+        # Also dump a Python snippet ready to paste into challenge_decks.py
+        snippet_path = Path("cache/all_combos_snippet.py")
+        with snippet_path.open("w", encoding="utf-8") as f:
+            f.write("# Auto-generated by massive_scan.py — paste into challenge_decks.py ALL_COMBOS\n")
+            f.write("# Generated with REALISTIC FTMO spreads (floor applied)\n\n")
+            f.write("ALL_COMBOS = {\n")
+            for c in robust + sensitivity_failed:
+                tier = "ROBUST" if c in robust else "SPREAD_OK"
+                params_dict = {**c["params"]}
+                params_dict.setdefault("session_start", 0)
+                params_dict.setdefault("session_end", 23)
+                f.write(f'    "{c["combo"]}": {{\n')
+                f.write(f'        "strat": "{c["strat"]}", "symbol": "{c["symbol"]}", '
+                        f'"tier": "{tier}", "pf": {c["pf"]:.2f},\n')
+                f.write(f'        "params": {repr(params_dict)},\n')
+                f.write(f'    }},\n')
+            f.write("}\n")
+        print(f"  Python snippet saved to {snippet_path}")
 
 
 if __name__ == "__main__":

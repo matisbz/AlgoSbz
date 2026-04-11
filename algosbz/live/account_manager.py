@@ -15,6 +15,8 @@ from typing import Optional
 
 import yaml
 
+from algosbz.live.runtime import TradingDayConfig, trading_day_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +35,11 @@ class AccountState:
 
         # Mode configs (exam vs funded)
         self.mode_configs = mode_configs
+        runtime_cfg = mode_configs.get("runtime", {})
+        self._trading_day_cfg = TradingDayConfig(
+            reset_hour=runtime_cfg.get("daily_reset_hour", 0),
+            timezone_name=runtime_cfg.get("daily_reset_timezone", "UTC"),
+        )
 
         # Daily tracking (reset each day)
         self._current_day: Optional[date] = None
@@ -81,13 +88,20 @@ class AccountState:
     def max_daily_losses(self) -> int:
         return self.active_config["max_daily_losses"]
 
-    def new_day(self, equity: float):
+    def current_trading_day(self, now: Optional[datetime] = None) -> date:
+        return trading_day_key(
+            now,
+            reset_hour=self._trading_day_cfg.reset_hour,
+            timezone_name=self._trading_day_cfg.timezone_name,
+        )
+
+    def new_day(self, equity: float, trading_day: Optional[date] = None):
         """Reset daily counters. Called when a new trading day starts."""
         # Count trading day if we traded yesterday
         if self._current_day is not None and self.total_trades > 0:
             if sum(self._instr_day_trades.values()) > 0:
                 self.trading_days += 1
-        self._current_day = date.today()
+        self._current_day = trading_day or self.current_trading_day()
         self._day_start_equity = equity
         self.current_equity = equity
         self._combo_day_losses.clear()
@@ -96,6 +110,56 @@ class AccountState:
         self._daily_stopped = False
         logger.info("[%s] New day. Equity=%.2f, State=%s, TradingDays=%d",
                     self.name, equity, self.state, self.trading_days)
+
+    def sync_runtime_day(self, equity: float, trading_day: Optional[date] = None):
+        """
+        Resume the current trading day if unchanged, otherwise reset counters.
+        """
+        day = trading_day or self.current_trading_day()
+        if self._current_day == day:
+            self.current_equity = equity
+            return
+        self.new_day(equity, trading_day=day)
+
+    def restore_runtime_state(self, saved: dict):
+        self._current_day = (
+            date.fromisoformat(saved["current_day"])
+            if saved.get("current_day")
+            else None
+        )
+        self._day_start_equity = saved.get("day_start_equity", self._day_start_equity)
+        self._combo_day_losses = defaultdict(
+            int, saved.get("combo_day_losses", {}) or {}
+        )
+        self._instr_day_trades = defaultdict(
+            int, saved.get("instr_day_trades", {}) or {}
+        )
+        self._total_daily_losses = saved.get("total_daily_losses", 0)
+        self._daily_stopped = saved.get("daily_stopped", False)
+
+    def runtime_state_payload(self) -> dict:
+        return {
+            "current_day": self._current_day.isoformat() if self._current_day else None,
+            "day_start_equity": self._day_start_equity,
+            "combo_day_losses": dict(self._combo_day_losses),
+            "instr_day_trades": dict(self._instr_day_trades),
+            "total_daily_losses": self._total_daily_losses,
+            "daily_stopped": self._daily_stopped,
+        }
+
+    def register_recovered_position(
+        self,
+        combo_name: str,
+        instrument: str,
+        opened_at: Optional[datetime],
+    ):
+        """
+        Rebuild counters when an already-open MT5 position is discovered on restart.
+        """
+        self.total_trades += 1
+        opened_day = self.current_trading_day(opened_at) if opened_at else self._current_day
+        if self._current_day is not None and opened_day == self._current_day:
+            self._instr_day_trades[instrument] += 1
 
     @property
     def target_reached(self) -> bool:

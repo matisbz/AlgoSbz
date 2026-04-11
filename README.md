@@ -2,7 +2,7 @@
 
 Sistema de trading algoritmico diseñado como **fabrica de cuentas fondeadas**. Genera señales automaticamente, pasa examenes FTMO 2-Step (y otras prop firms) y gestiona las cuentas fondeadas en modo conservador para maximizar supervivencia.
 
-**Resultados actuales:** 32.7% IS / 28.6% OOS funded rate con 16 combos decorrelados.
+**Fuente de verdad operativa:** la configuracion viva del deck y de los controles de exam/funded es `config/accounts.yaml`. `scripts/production_sim.py` valida ese perfil actual. Este README puede contener ejemplos o cifras historicas que hayan quedado desfasadas.
 
 ---
 

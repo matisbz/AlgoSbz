@@ -19,6 +19,7 @@ import logging
 import importlib
 import pandas as pd
 import numpy as np
+import yaml
 from copy import deepcopy
 from datetime import timedelta, date
 from collections import defaultdict
@@ -68,6 +69,36 @@ DECK = [
     "VMR_NDAQ_H4", "SwBrk_NDAQ_slow_H4", "KeltSq_NDAQ_H4",
     "SwBrk_XTIUSD_H1", "TPB_XTIUSD_H1",
 ]
+
+ACCOUNTS_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "accounts.yaml"
+
+
+def load_deployment_profile():
+    global EXAM_CONFIG, FUNDED_CONFIG, DECK
+
+    with open(ACCOUNTS_CONFIG_PATH, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    exam = raw["exam_mode"]
+    funded = raw["funded_mode"]
+    exam_risk = exam["risk_per_trade"]
+    funded_risk = funded["risk_per_trade"]
+
+    EXAM_CONFIG = {
+        "daily_cap": exam["daily_cap_pct"],
+        "cooldown": exam["cooldown"],
+        "p2_rf": exam.get("p2_risk_factor", 1.0),
+        "max_instr": exam["max_instr_per_day"],
+        "max_losses": exam["max_daily_losses"],
+    }
+    FUNDED_CONFIG = {
+        "risk_factor": (funded_risk / exam_risk) if exam_risk else 1.0,
+        "daily_cap": funded["daily_cap_pct"],
+        "cooldown": funded["cooldown"],
+        "max_instr": funded["max_instr_per_day"],
+        "max_losses": funded["max_daily_losses"],
+    }
+    DECK = list(raw["deck"])
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -377,6 +408,7 @@ def simulate_funded(streams, deck_combos, fund_start,
 # ═══════════════════════════════════════════════════════════════
 
 def main():
+    load_deployment_profile()
     config = load_config()
     instruments = load_all_instruments()
     loader = DataLoader()
@@ -609,20 +641,10 @@ def main():
     print(f"    -> {avg_months:.1f}mo avg survival, ${avg_pnl_mo * 0.05:+,.0f}/mo per $5K")
     print(f"    -> {term_rate:.0f}% terminated within 18mo")
 
-    # Cross-check with optimize_deck.py
-    # Note: IS rate may differ slightly because optimize_deck uses 107 continuous windows
-    # while production_sim uses 90 (10/year × 9 years). OOS is the real validation.
-    print(f"\n  CROSS-CHECK vs optimize_deck.py:")
-    expected_oos = 42.9  # Full_All_DC2.0_CD2_L0_P2x0.5_MI2_ML5
-    expected_is = 43.0   # Slightly different window count (107 vs 90)
-    oos_match = abs(oos_rate - expected_oos) < 1.0
-    print(f"    OOS rate: {oos_rate:.1f}% (expected ~{expected_oos}%) {'OK' if oos_match else 'MISMATCH!'}")
-    print(f"    IS rate:  {is_rate:.1f}% (optimizer: ~{expected_is}%, diff due to window count)")
-
-    if oos_match:
-        print(f"\n  VALIDATED — OOS results match optimizer. Ready for demo deployment.")
-    else:
-        print(f"\n  WARNING — OOS results differ from optimizer. Investigate before deploying!")
+    print(f"\n  CURRENT PROFILE SOURCE OF TRUTH:")
+    print(f"    Deck + exam/funded controls loaded from config/accounts.yaml")
+    print(f"    Compare these outputs with optimize_deck.py only after exporting")
+    print(f"    the same profile from the optimizer.")
 
 
 if __name__ == "__main__":
