@@ -44,6 +44,8 @@ logging.basicConfig(level=logging.ERROR)
 
 from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
 
+MAX_SIGNAL_OVERLAP = 0.80
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # CORE FUNCTIONS
@@ -90,7 +92,14 @@ def precompute_trades(config, instruments, data_dict, combo_names, risk_pct=0.02
         for t in result.trades:
             ts = t.entry_time
             if isinstance(ts, pd.Timestamp):
-                trades.append({"ts": ts, "date": ts.date(), "pnl": t.pnl, "combo": combo_name})
+                trades.append({
+                    "ts": ts,
+                    "date": ts.date(),
+                    "pnl": t.pnl,
+                    "combo": combo_name,
+                    "symbol": t.symbol,
+                    "direction": t.direction.name,
+                })
         streams[combo_name] = trades
         if trades:
             pnl_total = sum(t["pnl"] for t in trades)
@@ -125,15 +134,69 @@ def compute_correlation_matrix(streams, date_cutoff=None):
     return combined.corr()
 
 
-def greedy_decorrelated_deck(streams, corr_matrix, max_size, candidates=None):
-    """Build deck by greedily adding least-correlated combo."""
+def compute_signal_overlap_matrix(streams, date_cutoff=None):
+    """
+    Compute structural signal overlap using exact entry events.
+
+    Overlap coefficient = |A ∩ B| / min(|A|, |B|), measured on
+    (symbol, timestamp, direction) so only same-market same-side entries count.
+    If date_cutoff provided, only use data before that date (IS only).
+    """
+    signal_sets = {}
+    for combo, trades in streams.items():
+        filtered = trades
+        if date_cutoff:
+            filtered = [t for t in trades if t["date"] < date_cutoff]
+        if not filtered:
+            continue
+        signal_sets[combo] = {
+            (t["symbol"], pd.Timestamp(t["ts"]), t["direction"])
+            for t in filtered
+        }
+
+    combos = list(signal_sets.keys())
+    if len(combos) < 2:
+        return pd.DataFrame()
+
+    overlap = pd.DataFrame(
+        np.eye(len(combos)),
+        index=combos,
+        columns=combos,
+        dtype=float,
+    )
+    for i, c1 in enumerate(combos):
+        s1 = signal_sets[c1]
+        for j in range(i + 1, len(combos)):
+            c2 = combos[j]
+            s2 = signal_sets[c2]
+            denom = min(len(s1), len(s2))
+            coef = len(s1 & s2) / denom if denom else 0.0
+            overlap.loc[c1, c2] = coef
+            overlap.loc[c2, c1] = coef
+    return overlap
+
+
+def _matrix_value(matrix, row, col, default=0.0):
+    if matrix.empty or row not in matrix.index or col not in matrix.columns:
+        return default
+    return float(matrix.loc[row, col])
+
+
+def greedy_decorrelated_deck(
+    streams,
+    corr_matrix,
+    overlap_matrix,
+    max_size,
+    candidates=None,
+    max_signal_overlap=MAX_SIGNAL_OVERLAP,
+):
+    """Build deck by greedily adding least-correlated, non-redundant combos."""
     if candidates is None:
         candidates = list(streams.keys())
-    candidates = [c for c in candidates if c in corr_matrix.columns and c in streams]
+    candidates = [c for c in candidates if c in streams]
     if not candidates:
         return []
 
-    # Start with highest PF combo
     best_start = max(candidates, key=lambda c: ALL_COMBOS[c]["pf"])
     deck = [best_start]
     remaining = [c for c in candidates if c != best_start]
@@ -142,16 +205,21 @@ def greedy_decorrelated_deck(streams, corr_matrix, max_size, candidates=None):
         best_next = None
         best_score = float('inf')
         for c in remaining:
-            avg_corr = np.mean([abs(corr_matrix.loc[c, d]) for d in deck
-                                if c in corr_matrix.index and d in corr_matrix.columns])
+            overlaps = [_matrix_value(overlap_matrix, c, d) for d in deck]
+            if overlaps and max(overlaps) >= max_signal_overlap:
+                continue
+
+            avg_corr = np.mean([abs(_matrix_value(corr_matrix, c, d)) for d in deck])
+            avg_overlap = np.mean(overlaps) if overlaps else 0.0
             pf_bonus = (ALL_COMBOS[c]["pf"] - 1.0) * 0.5
-            score = avg_corr - pf_bonus
+            score = avg_corr + avg_overlap * 0.25 - pf_bonus
             if score < best_score:
                 best_score = score
                 best_next = c
-        if best_next:
-            deck.append(best_next)
-            remaining.remove(best_next)
+        if best_next is None:
+            break
+        deck.append(best_next)
+        remaining.remove(best_next)
     return deck
 
 
@@ -462,6 +530,20 @@ def main():
         for c1, c2, r in pairs[:5]:
             print(f"      {c1:28s} <-> {c2:28s}  r={r:+.3f}")
 
+    print(f"\n  Computing signal overlap matrix (IS data only: <2025, max allowed={MAX_SIGNAL_OVERLAP:.0%})...")
+    overlap = compute_signal_overlap_matrix(streams, date_cutoff=oos_cutoff)
+    if not overlap.empty:
+        print(f"    {len(overlap)} combos in matrix")
+        overlap_pairs = []
+        for i in range(len(overlap)):
+            for j in range(i + 1, len(overlap)):
+                c1, c2 = overlap.index[i], overlap.columns[j]
+                overlap_pairs.append((c1, c2, overlap.iloc[i, j]))
+        overlap_pairs.sort(key=lambda x: x[2], reverse=True)
+        print("    Top 10 overlapping:")
+        for c1, c2, coef in overlap_pairs[:10]:
+            print(f"      {c1:28s} <-> {c2:28s}  overlap={coef:.1%}")
+
     # ── Step 3: Build deck candidates ──
     robust = [c for c in active_pool if ALL_COMBOS[c]["tier"] == "ROBUST"]
     print(f"\n  Building deck candidates (ROBUST: {len(robust)}, ALL: {len(active_pool)})...")
@@ -469,11 +551,13 @@ def main():
     decks = {}
     for size in [4, 6, 8, 10, 12, 16, 20, 24]:
         if size <= len(robust):
-            d = greedy_decorrelated_deck(streams, corr, size, robust)
-            decks[f"Decorr{size}_R"] = d
+            d = greedy_decorrelated_deck(streams, corr, overlap, size, robust)
+            if len(d) == size:
+                decks[f"Decorr{size}_R"] = d
         if size <= len(active_pool):
-            d = greedy_decorrelated_deck(streams, corr, size, active_pool)
-            decks[f"Decorr{size}_A"] = d
+            d = greedy_decorrelated_deck(streams, corr, overlap, size, active_pool)
+            if len(d) == size:
+                decks[f"Decorr{size}_A"] = d
 
     # v5 (2026-04-08): Full_All / Robust_All decks REMOVED — they overfit on IS
     # (65.4% IS / 28.6% OOS, +36.8pp gap). Only decorrelated decks are considered.

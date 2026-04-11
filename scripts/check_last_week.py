@@ -8,7 +8,7 @@ import pandas as pd
 import MetaTrader5 as mt5
 from datetime import datetime, timedelta
 from algosbz.core.enums import SignalAction
-from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
 from algosbz.live.mt5_connector import MT5Connector
 
 DECK = [

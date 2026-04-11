@@ -1,12 +1,11 @@
 """
-Production Validation — independent check of the best config from optimize_deck.py.
+Production validation for the deployed profile in config/accounts.yaml.
 
-Takes the FIXED best config (no optimization here) and validates it:
-1. Exam mode: Full_All @2% DC2.0 CD2 P2x0.5 MI2 ML5
-2. Funded mode: RF0.25 DC2.5 CD1 MI2 ML3
-3. Full year-by-year breakdown + funded survival + ROI
-
-This script must AGREE with optimize_deck.py results. If it doesn't, there's a bug.
+This script does not optimize anything. It loads the live deployment profile,
+replays the deck on historical data, and reports:
+1. Exam pass rate (IS 2016-2024, OOS 2025)
+2. Year-by-year breakdown
+3. Funded-account survival and monthly expectancy
 
 Usage:
     python -X utf8 scripts/production_sim.py
@@ -31,14 +30,17 @@ from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 logging.basicConfig(level=logging.ERROR)
 
-from scripts.challenge_decks import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
 
 
 # ═══════════════════════════════════════════════════════════════
-# FIXED CONFIG — from optimize_deck.py best results
+# Deployment profile defaults. Real values are loaded from config/accounts.yaml.
 # ═══════════════════════════════════════════════════════════════
+
+BASE_PRECOMPUTE_RISK = 0.02
 
 EXAM_CONFIG = {
+    "p1_rf": 1.0,
     "daily_cap": 2.0,
     "cooldown": 2,
     "p2_rf": 0.5,
@@ -54,7 +56,7 @@ FUNDED_CONFIG = {
     "max_losses": 3,
 }
 
-# Full_All deck (from optimize_deck.py — 35 combos, 9 instruments)
+# Placeholder deck. Replaced at runtime by config/accounts.yaml.
 DECK = [
     "TPB_XTIUSD_loose_H4", "TPB_XNGUSD_loose_H4", "SwBrk_XTIUSD_H4",
     "SwBrk_SPY_H4", "SwBrk_SPY_slow_H4", "Engulf_EURUSD_tight_H4",
@@ -85,14 +87,16 @@ def load_deployment_profile():
     funded_risk = funded["risk_per_trade"]
 
     EXAM_CONFIG = {
+        "p1_rf": (exam_risk / BASE_PRECOMPUTE_RISK) if BASE_PRECOMPUTE_RISK else 1.0,
         "daily_cap": exam["daily_cap_pct"],
         "cooldown": exam["cooldown"],
-        "p2_rf": exam.get("p2_risk_factor", 1.0),
+        "p2_rf": ((exam_risk * exam.get("p2_risk_factor", 1.0)) / BASE_PRECOMPUTE_RISK)
+                 if BASE_PRECOMPUTE_RISK else 1.0,
         "max_instr": exam["max_instr_per_day"],
         "max_losses": exam["max_daily_losses"],
     }
     FUNDED_CONFIG = {
-        "risk_factor": (funded_risk / exam_risk) if exam_risk else 1.0,
+        "risk_factor": (funded_risk / BASE_PRECOMPUTE_RISK) if BASE_PRECOMPUTE_RISK else 1.0,
         "daily_cap": funded["daily_cap_pct"],
         "cooldown": funded["cooldown"],
         "max_instr": funded["max_instr_per_day"],
@@ -152,7 +156,7 @@ def precompute_trades(config, instruments, data_dict, combo_names, risk_pct=0.02
 
 def simulate_exam(streams, combo_names, start_date,
                   daily_loss_cap_pct=3.0, combo_daily_max_losses=1,
-                  p2_risk_factor=1.0,
+                  p1_risk_factor=1.0, p2_risk_factor=1.0,
                   max_instr_per_day=99, max_daily_losses=99,
                   initial=100000, p1_days=30, p2_days=60):
     """
@@ -299,7 +303,7 @@ def simulate_exam(streams, combo_names, start_date,
                 "max_daily_dd": round(max_daily_dd * 100, 2),
                 "trading_days": len(trading_days), "days_used": days_used}
 
-    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=1.0)
+    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=p1_risk_factor)
     if p1["outcome"] != "PASS":
         return {"exam": "FAIL_P1", "p1": p1, "p2": None}
 
@@ -428,8 +432,8 @@ def main():
     streams = precompute_trades(config, instruments, data_dict, DECK)
 
     print(f"\n{'='*120}")
-    print(f"  PRODUCTION VALIDATION — fixed config, no optimization")
-    print(f"  Deck: {len(DECK)} combos (Full_All)")
+    print(f"  PRODUCTION VALIDATION - deployed profile, no optimization")
+    print(f"  Deck: {len(DECK)} combos")
     print(f"  Exam:   DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
           f"P2x{EXAM_CONFIG['p2_rf']} MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
     print(f"  Funded: RF{FUNDED_CONFIG['risk_factor']} DC{FUNDED_CONFIG['daily_cap']} "
@@ -447,7 +451,7 @@ def main():
 
     print(f"\n  Exam windows: {len(is_windows)} IS + {len(oos_windows)} OOS")
 
-    # Year-by-year
+    # Year-by-year, grouped by rolling-window start year so totals match the optimizer.
     print(f"\n{'='*120}")
     print(f"  YEAR-BY-YEAR EXAM RESULTS")
     print(f"{'='*120}")
@@ -461,9 +465,10 @@ def main():
     total_oos_n = 0
 
     for year in range(2016, 2026):
-        year_windows = pd.date_range(f"{year}-01-01", f"{year}-10-01", freq="30D")
-        if year == 2025:
-            year_windows = oos_windows  # use truncated windows
+        if year < 2025:
+            year_windows = [w for w in is_windows if w.year == year]
+        else:
+            year_windows = [w for w in oos_windows if w.year == year]
 
         funded = p1_pass = dd_fails = ddd_fails = prof_fails = 0
 
@@ -472,6 +477,7 @@ def main():
                 streams, DECK, start,
                 daily_loss_cap_pct=EXAM_CONFIG["daily_cap"],
                 combo_daily_max_losses=EXAM_CONFIG["cooldown"],
+                p1_risk_factor=EXAM_CONFIG["p1_rf"],
                 p2_risk_factor=EXAM_CONFIG["p2_rf"],
                 max_instr_per_day=EXAM_CONFIG["max_instr"],
                 max_daily_losses=EXAM_CONFIG["max_losses"],
@@ -517,6 +523,7 @@ def main():
             streams, DECK, start,
             daily_loss_cap_pct=EXAM_CONFIG["daily_cap"],
             combo_daily_max_losses=EXAM_CONFIG["cooldown"],
+            p1_risk_factor=EXAM_CONFIG["p1_rf"],
             p2_risk_factor=EXAM_CONFIG["p2_rf"],
             max_instr_per_day=EXAM_CONFIG["max_instr"],
             max_daily_losses=EXAM_CONFIG["max_losses"],
@@ -638,7 +645,8 @@ def main():
 
     print(f"\n  FUNDED MODE: RF{FUNDED_CONFIG['risk_factor']} DC{FUNDED_CONFIG['daily_cap']} "
           f"CD{FUNDED_CONFIG['cooldown']} MI{FUNDED_CONFIG['max_instr']} ML{FUNDED_CONFIG['max_losses']}")
-    print(f"    -> {avg_months:.1f}mo avg survival, ${avg_pnl_mo * 0.05:+,.0f}/mo per $5K")
+    print(f"    -> {avg_months:.1f}mo avg survival, ${avg_pnl_mo * 0.05:+,.0f} gross / "
+          f"${avg_pnl_mo * 0.05 * 0.8:+,.0f} net per $5K")
     print(f"    -> {term_rate:.0f}% terminated within 18mo")
 
     print(f"\n  CURRENT PROFILE SOURCE OF TRUTH:")
