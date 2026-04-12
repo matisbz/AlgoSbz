@@ -10,7 +10,7 @@ Always prioritize:
 - prop-firm rule compliance,
 - conservative assumptions.
 
-When the task involves strategy design, backtesting, combo construction, validation, or deployment logic, use the `prop-research` skill.
+When the task involves strategy design, backtesting, combo construction, validation, or deployment logic, use the `prop-trader` skill.
 
 Never accept backtest improvements unless you verify:
 - no lookahead bias,
