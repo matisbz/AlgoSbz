@@ -30,53 +30,67 @@ from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 logging.basicConfig(level=logging.ERROR)
 
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 
 
 # ═══════════════════════════════════════════════════════════════
 # Deployment profile defaults. Real values are loaded from config/accounts.yaml.
 # ═══════════════════════════════════════════════════════════════
 
-BASE_PRECOMPUTE_RISK = 0.02
-
 EXAM_CONFIG = {
-    "p1_rf": 1.0,
+    "risk_per_trade": 0.02,
+    "p2_risk_per_trade": 0.01,
     "daily_cap": 2.0,
     "cooldown": 2,
-    "p2_rf": 0.5,
     "max_instr": 2,
     "max_losses": 5,
 }
 
 FUNDED_CONFIG = {
-    "risk_factor": 0.25,
+    "risk_per_trade": 0.01,
     "daily_cap": 2.5,
     "cooldown": 1,
     "max_instr": 2,
     "max_losses": 3,
 }
 
-# Placeholder deck. Replaced at runtime by config/accounts.yaml.
+# ALIVE deck — 25 combos with PF > 1.0 in 2024-2025 (from diagnose_combo_health.py)
+# Replaced at runtime by config/accounts.yaml if available.
 DECK = [
-    "TPB_XTIUSD_loose_H4", "TPB_XNGUSD_loose_H4", "SwBrk_XTIUSD_H4",
-    "SwBrk_SPY_H4", "SwBrk_SPY_slow_H4", "Engulf_EURUSD_tight_H4",
-    "Engulf_XAUUSD_tight_H4", "StrBrk_GBPJPY_slow_H4", "MomDiv_SPY_H1",
-    "RegVMR_XAUUSD_H1", "RegVMR_XTIUSD_H1", "SessBrk_XTIUSD_M15",
-    "SMCOB_XAUUSD_loose_H4", "VMR_USDCHF_H1", "VMR_USDJPY_H4",
-    "TPB_XTIUSD_H4", "TPB_GBPJPY_loose_H1", "IBB_EURUSD_loose_H4",
-    "Engulf_EURUSD_H4", "MomDiv_SPY_loose_H1", "EMArib_XNGUSD_loose_H4",
-    "MACross_EURUSD_H4", "MACross_XAUUSD_H4", "MACross_XTIUSD_H4",
-    "MACross_SPY_H4", "MACross_XNGUSD_H4", "RSIext_GBPJPY_H4",
-    "RSIext_XNGUSD_H4", "KeltSq_XTIUSD_H4", "KeltSq_XNGUSD_H4",
-    "VMR_NDAQ_H4", "SwBrk_NDAQ_slow_H4", "KeltSq_NDAQ_H4",
-    "SwBrk_XTIUSD_H1", "TPB_XTIUSD_H1",
+    # Tier 1: PF>1.0 in 24-25 + >=6 yrs profitable (16 combos)
+    "VMR_NZDUSD_wideR_H4_ny",          # PF24=6.44  6/10yrs
+    "MACross_XAUUSD_trend_H4_ny",      # PF24=3.43  6/10yrs
+    "IBB_NZDUSD_trend_H4",             # PF24=3.29  6/10yrs
+    "Engulf_EURUSD_trend_H4",          # PF24=2.66  6/10yrs
+    "ADXbirth_XTIUSD_slow_ema_H4",     # PF24=1.94  6/10yrs
+    "EMArib_EURJPY_tight_H1",          # PF24=1.59  7/10yrs
+    "MACross_AUDUSD_megaT_H4",         # PF24=1.56  7/10yrs
+    "MACross_XAUUSD_wideR_H4_ny",      # PF24=1.52  8/10yrs
+    "PinBar_EURJPY_deep_H4",           # PF24=1.43  7/10yrs
+    "StrBrk_GBPJPY_wideR_H4",          # PF24=1.40  7/10yrs
+    "VMR_USDCHF_default_H1_ny",        # PF24=1.32  8/10yrs
+    "MomDiv_AUDUSD_wideR_H4",          # PF24=1.31  6/10yrs
+    "StochRev_AUDUSD_calm_H4",         # PF24=1.21  7/10yrs
+    "VMR_USDJPY_wideR_H4_ny",          # PF24=1.17  6/10yrs
+    "EMArib_AUDUSD_trend_H4_lon",      # PF24=1.09  6/10yrs
+    "MACross_EURUSD_wideR_H4_lon",     # PF24=1.02  6/10yrs
+    # Tier 2: PF>1.0 in 24-25 + 4-5 yrs profitable (9 combos)
+    "RegVMR_NZDUSD_default_H1_ny",     # PF24=2.78  5/10yrs
+    "MACDhist_EURJPY_trend_H4",        # PF24=1.68  4/10yrs
+    "MACross_USDCHF_trend_H4_ny",      # PF24=1.52  4/10yrs
+    "RSIext_EURJPY_wideR_H4",          # PF24=1.40  0/10yrs (few trades/yr)
+    "TPB_XTIUSD_trend_H4_ny",          # PF24=1.30  5/10yrs
+    "MACross_USDJPY_wideR_H4_lon",     # PF24=1.09  4/10yrs
+    "MACross_USDCHF_megaT_H4",         # PF24=1.09  3/10yrs
+    "MACross_NZDUSD_trend_H4_lon",     # PF24=4.35  3/10yrs (low freq)
+    "TPB_NZDUSD_loose_H4_ny",          # PF24=1.00  7/10yrs (borderline)
 ]
 
 ACCOUNTS_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "accounts.yaml"
 
 
 def load_deployment_profile():
-    global EXAM_CONFIG, FUNDED_CONFIG, DECK
+    global EXAM_CONFIG, FUNDED_CONFIG
 
     with open(ACCOUNTS_CONFIG_PATH, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
@@ -85,24 +99,25 @@ def load_deployment_profile():
     funded = raw["funded_mode"]
     exam_risk = exam["risk_per_trade"]
     funded_risk = funded["risk_per_trade"]
+    p2_factor = exam.get("p2_risk_factor", 1.0)
 
     EXAM_CONFIG = {
-        "p1_rf": (exam_risk / BASE_PRECOMPUTE_RISK) if BASE_PRECOMPUTE_RISK else 1.0,
+        "risk_per_trade": exam_risk,
+        "p2_risk_per_trade": exam_risk * p2_factor,
         "daily_cap": exam["daily_cap_pct"],
         "cooldown": exam["cooldown"],
-        "p2_rf": ((exam_risk * exam.get("p2_risk_factor", 1.0)) / BASE_PRECOMPUTE_RISK)
-                 if BASE_PRECOMPUTE_RISK else 1.0,
         "max_instr": exam["max_instr_per_day"],
         "max_losses": exam["max_daily_losses"],
     }
     FUNDED_CONFIG = {
-        "risk_factor": (funded_risk / BASE_PRECOMPUTE_RISK) if BASE_PRECOMPUTE_RISK else 1.0,
+        "risk_per_trade": funded_risk,
         "daily_cap": funded["daily_cap_pct"],
         "cooldown": funded["cooldown"],
         "max_instr": funded["max_instr_per_day"],
         "max_losses": funded["max_daily_losses"],
     }
-    DECK = list(raw["deck"])
+    # DECK is NOT loaded from accounts.yaml — uses the ALIVE deck defined above.
+    # accounts.yaml deck has naming mismatches with v7_expanded pool.
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -117,8 +132,14 @@ def load_strategy(entry):
 
 
 def precompute_trades(config, instruments, data_dict, combo_names, risk_pct=0.02):
-    """Pre-compute all trades at DIRECT risk level with LOOSE DD limits."""
-    print(f"\n  Pre-computing trades at {risk_pct*100:.0f}% risk (loose DD)...")
+    """Pre-compute trade events per combo with loose DD (no portfolio interaction).
+
+    Stores enough info to RE-SIZE each trade at portfolio replay time:
+    pnl_pips, sl_pips, symbol, direction, pip_value, min_lot, max_lot.
+    The actual PnL in $ will be recalculated during portfolio replay
+    using the real portfolio equity at entry time.
+    """
+    print(f"\n  Pre-computing trades (loose DD, storing pip-level data)...")
     streams = {}
     cfg = deepcopy(config)
     cfg.risk.risk_per_trade = risk_pct
@@ -133,38 +154,86 @@ def precompute_trades(config, instruments, data_dict, combo_names, risk_pct=0.02
         sym = entry["symbol"]
         if sym not in data_dict:
             continue
+        inst = instruments[sym]
         try:
             strategy = load_strategy(entry)
-            engine = BacktestEngine(cfg, instruments[sym], EquityManager(eq_cfg))
+            engine = BacktestEngine(cfg, inst, EquityManager(eq_cfg))
             result = engine.run(strategy, data_dict[sym], sym)
         except Exception as e:
             print(f"    {combo_name}: ERROR {e}")
             continue
         trades = []
         for t in result.trades:
-            ts = t.entry_time
-            if isinstance(ts, pd.Timestamp):
-                trades.append({"ts": ts, "date": ts.date(), "pnl": t.pnl, "combo": combo_name})
+            if not isinstance(t.entry_time, pd.Timestamp):
+                continue
+            # SL distance in pips (always positive)
+            if t.direction.name == "LONG":
+                sl_pips = (t.entry_price - t.stop_loss) / inst.pip_size
+            else:
+                sl_pips = (t.stop_loss - t.entry_price) / inst.pip_size
+            sl_pips = abs(sl_pips)
+            if sl_pips <= 0:
+                continue
+            trades.append({
+                "ts": t.entry_time,
+                "ts_exit": t.exit_time,
+                "date": t.entry_time.date(),
+                "combo": combo_name,
+                "symbol": sym,
+                "pnl_pips": t.pnl_pips,
+                "sl_pips": sl_pips,
+                "commission_per_lot": cfg.backtest.commission_per_lot,
+                "pip_value": inst.pip_value_per_lot,
+                "min_lot": inst.min_lot,
+                "max_lot": inst.max_lot,
+            })
         streams[combo_name] = trades
         if trades:
-            pnl_total = sum(t["pnl"] for t in trades)
-            print(f"    {combo_name}: {len(trades)} trades, PnL=${pnl_total:+,.0f}")
+            pnl_pips_total = sum(t["pnl_pips"] for t in trades)
+            print(f"    {combo_name}: {len(trades)} trades, {pnl_pips_total:+,.0f} pips")
         else:
             print(f"    {combo_name}: 0 trades")
     return streams
 
 
+def _size_trade(t, equity, risk_pct):
+    """Calculate lot size and dollar PnL for a precomputed trade at given equity.
+
+    Position sizing formula (same as RiskManager.evaluate_signal):
+        lot = equity * risk_pct / (sl_pips * pip_value)
+    Then PnL = pnl_pips * pip_value * lot - commission * lot
+    """
+    sl_pips = t["sl_pips"]
+    pip_value = t["pip_value"]
+    if sl_pips <= 0 or pip_value <= 0:
+        return 0.0, 0.0
+
+    risk_amount = equity * risk_pct
+    lot = risk_amount / (sl_pips * pip_value)
+    lot = max(t["min_lot"], min(lot, t["max_lot"]))
+    lot = round(lot, 2)
+
+    if lot < t["min_lot"]:
+        return 0.0, 0.0
+
+    pnl = t["pnl_pips"] * pip_value * lot - t["commission_per_lot"] * lot
+    return lot, pnl
+
+
 def simulate_exam(streams, combo_names, start_date,
                   daily_loss_cap_pct=3.0, combo_daily_max_losses=1,
-                  p1_risk_factor=1.0, p2_risk_factor=1.0,
+                  risk_per_trade=0.02, p2_risk_per_trade=0.01,
                   max_instr_per_day=99, max_daily_losses=99,
+                  equity_manager_cfg=None,
                   initial=100000, p1_days=30, p2_days=60):
-    """
-    FTMO 2-step exam simulation.
+    """FTMO 2-step exam with REAL portfolio-level position sizing.
+
+    Each trade is sized on the CURRENT portfolio equity, not precomputed.
+    EquityManager (anti-martingale tiers) is applied if provided.
     Balance RESETS between phases. DD limits static from initial.
     """
     def run_phase(phase_start, window_days, target_pct, starting_equity,
-                  risk_factor=1.0):
+                  risk_pct=0.02, eq_mgr=None):
         phase_end = phase_start + timedelta(days=window_days)
         equity = starting_equity
         daily_start_eq = starting_equity
@@ -180,6 +249,9 @@ def simulate_exam(streams, combo_names, start_date,
         instr_day_trades = defaultdict(int)
         total_daily_losses = 0
         daily_stopped = False
+
+        if eq_mgr is not None:
+            eq_mgr.initialize(starting_equity)
 
         target_equity = starting_equity + (target_pct / 100) * initial
 
@@ -208,7 +280,6 @@ def simulate_exam(streams, combo_names, start_date,
                 daily_stopped = False
 
             # Once target reached, stop real trading — just count trading days
-            # (simulates micro-operations to meet min days requirement)
             if target_reached:
                 trading_days.add(t["date"])
                 if len(trading_days) >= 4:
@@ -217,6 +288,10 @@ def simulate_exam(streams, combo_names, start_date,
                 continue
 
             if daily_stopped:
+                continue
+
+            # EquityManager halt check
+            if eq_mgr is not None and eq_mgr.should_stop_trading():
                 continue
 
             combo = t["combo"]
@@ -229,10 +304,25 @@ def simulate_exam(streams, combo_names, start_date,
             if total_daily_losses >= max_daily_losses:
                 continue
 
-            pnl = t["pnl"] * risk_factor
+            # Real position sizing on current portfolio equity
+            effective_risk = risk_pct
+            if eq_mgr is not None:
+                eq_mgr.on_bar(t["ts"])
+                multiplier = eq_mgr.get_risk_multiplier()
+                if multiplier <= 0:
+                    continue
+                effective_risk = risk_pct * multiplier
+
+            lot, pnl = _size_trade(t, equity, effective_risk)
+            if lot <= 0:
+                continue
+
             equity += pnl
             trading_days.add(t["date"])
             instr_day_trades[instrument] += 1
+
+            if eq_mgr is not None:
+                eq_mgr.on_trade_closed(pnl, equity)
 
             if pnl < 0:
                 combo_day_losses[combo] += 1
@@ -281,7 +371,6 @@ def simulate_exam(streams, combo_names, start_date,
                 check_date += timedelta(days=1)
             if remaining_days >= days_needed:
                 locked = True
-                trading_days_total = len(trading_days) + days_needed
                 days_used = (check_date - phase_start.date()).days
 
         profit_pct = (equity - starting_equity) / initial * 100
@@ -292,7 +381,6 @@ def simulate_exam(streams, combo_names, start_date,
         elif locked or (equity >= target_equity and len(trading_days) >= 4):
             outcome = "PASS"
         elif equity >= target_equity:
-            # Target reached but not enough weekdays left in window (very rare)
             outcome = "FAIL_MIN_DAYS"
         else:
             outcome = "FAIL_PROFIT"
@@ -303,12 +391,16 @@ def simulate_exam(streams, combo_names, start_date,
                 "max_daily_dd": round(max_daily_dd * 100, 2),
                 "trading_days": len(trading_days), "days_used": days_used}
 
-    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=p1_risk_factor)
+    eq_mgr_p1 = EquityManager(equity_manager_cfg) if equity_manager_cfg else None
+    p1 = run_phase(start_date, p1_days, 10.0, initial,
+                   risk_pct=risk_per_trade, eq_mgr=eq_mgr_p1)
     if p1["outcome"] != "PASS":
         return {"exam": "FAIL_P1", "p1": p1, "p2": None}
 
     p2_start = start_date + timedelta(days=p1["days_used"])
-    p2 = run_phase(p2_start, p2_days, 5.0, initial, risk_factor=p2_risk_factor)
+    eq_mgr_p2 = EquityManager(equity_manager_cfg) if equity_manager_cfg else None
+    p2 = run_phase(p2_start, p2_days, 5.0, initial,
+                   risk_pct=p2_risk_per_trade, eq_mgr=eq_mgr_p2)
 
     if p2["outcome"] == "PASS":
         return {"exam": "FUNDED", "p1": p1, "p2": p2}
@@ -316,9 +408,10 @@ def simulate_exam(streams, combo_names, start_date,
 
 
 def simulate_funded(streams, deck_combos, fund_start,
-                    risk_factor=1.0, daily_cap=2.5, cooldown=1,
-                    max_instr=99, max_losses=99, months=18):
-    """Simulate a funded account with given risk controls."""
+                    risk_per_trade=0.01, daily_cap=2.5, cooldown=1,
+                    max_instr=99, max_losses=99,
+                    equity_manager_cfg=None, months=18):
+    """Simulate a funded account with REAL portfolio-level position sizing."""
     fund_end = fund_start + timedelta(days=months * 30)
     initial = 100000
     equity = initial
@@ -333,6 +426,10 @@ def simulate_funded(streams, deck_combos, fund_start,
     monthly_pnl = defaultdict(float)
     terminated = False
     termination_day = None
+
+    eq_mgr = EquityManager(equity_manager_cfg) if equity_manager_cfg else None
+    if eq_mgr is not None:
+        eq_mgr.initialize(initial)
 
     all_trades = []
     for combo in deck_combos:
@@ -361,6 +458,9 @@ def simulate_funded(streams, deck_combos, fund_start,
         if daily_stopped:
             continue
 
+        if eq_mgr is not None and eq_mgr.should_stop_trading():
+            continue
+
         combo = t["combo"]
         if combo_day_losses[combo] >= cooldown:
             continue
@@ -371,11 +471,26 @@ def simulate_funded(streams, deck_combos, fund_start,
         if total_daily_losses_d >= max_losses:
             continue
 
-        pnl = t["pnl"] * risk_factor
+        # Real position sizing on current portfolio equity
+        effective_risk = risk_per_trade
+        if eq_mgr is not None:
+            eq_mgr.on_bar(t["ts"])
+            multiplier = eq_mgr.get_risk_multiplier()
+            if multiplier <= 0:
+                continue
+            effective_risk = risk_per_trade * multiplier
+
+        lot, pnl = _size_trade(t, equity, effective_risk)
+        if lot <= 0:
+            continue
+
         equity += pnl
         instr_day_trades_d[instrument] += 1
         month_key = t["date"].strftime("%Y-%m")
         monthly_pnl[month_key] += pnl
+
+        if eq_mgr is not None:
+            eq_mgr.on_trade_closed(pnl, equity)
 
         if pnl < 0:
             combo_day_losses[combo] += 1
@@ -423,7 +538,7 @@ def main():
     print("Loading data...")
     for sym in sorted(all_symbols):
         try:
-            data_dict[sym] = loader.load(sym, start="2014-09-01", end="2026-01-01")
+            data_dict[sym] = loader.load(sym, start="2014-09-01")
             last = data_dict[sym].index[-1]
             print(f"  {sym}: {len(data_dict[sym]):,} bars (-> {last.date()})")
         except Exception as e:
@@ -432,99 +547,137 @@ def main():
     streams = precompute_trades(config, instruments, data_dict, DECK)
 
     print(f"\n{'='*120}")
-    print(f"  PRODUCTION VALIDATION - deployed profile, no optimization")
+    print(f"  PRODUCTION VALIDATION - portfolio-level sizing, no optimization")
     print(f"  Deck: {len(DECK)} combos")
-    print(f"  Exam:   DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
-          f"P2x{EXAM_CONFIG['p2_rf']} MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
-    print(f"  Funded: RF{FUNDED_CONFIG['risk_factor']} DC{FUNDED_CONFIG['daily_cap']} "
+    print(f"  Exam:   R{EXAM_CONFIG['risk_per_trade']*100:.1f}% "
+          f"P2R{EXAM_CONFIG['p2_risk_per_trade']*100:.1f}% "
+          f"DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
+          f"MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
+    print(f"  Funded: R{FUNDED_CONFIG['risk_per_trade']*100:.1f}% "
+          f"DC{FUNDED_CONFIG['daily_cap']} "
           f"CD{FUNDED_CONFIG['cooldown']} MI{FUNDED_CONFIG['max_instr']} ML{FUNDED_CONFIG['max_losses']}")
     print(f"{'='*120}")
 
     # ══════════════════════════════════════════════════════════════
-    # PHASE 1: EXAM VALIDATION — every 30 days, 2016-2025
+    # PHASE 1: EXAM VALIDATION — every business day, Monte Carlo
     # ══════════════════════════════════════════════════════════════
 
-    last_data_date = min(data_dict[sym].index[-1] for sym in data_dict)
-    max_oos_start = last_data_date - timedelta(days=90)
-    is_windows = pd.date_range("2016-01-01", "2024-10-01", freq="30D")
-    oos_windows = pd.date_range("2025-01-01", max_oos_start, freq="30D")
+    # Use the MAJORITY of symbols' end date for OOS (exclude symbols without 2026 data)
+    sym_end_dates = {sym: data_dict[sym].index[-1] for sym in data_dict}
+    oos_sym_dates = [d for d in sym_end_dates.values() if d.year >= 2026]
+    last_data_date = min(oos_sym_dates) if oos_sym_dates else max(sym_end_dates.values())
+    # IS = 2016 through 2025, OOS = 2026 (FTMO real data)
+    # Generate every business day as a possible exam start date
+    is_starts = pd.bdate_range("2016-01-01", "2025-09-01")
+    # OOS: need 30d for P1 minimum, ideally 90d for full exam
+    oos_last_p1 = last_data_date - timedelta(days=30)
+    oos_last_full = last_data_date - timedelta(days=90)
+    oos_starts = pd.bdate_range("2026-01-02", oos_last_p1)
 
-    print(f"\n  Exam windows: {len(is_windows)} IS + {len(oos_windows)} OOS")
+    print(f"\n  IS period: 2016-2025 | OOS period: 2026 (FTMO data)")
+    print(f"  IS exam starts:  {len(is_starts)} business days")
+    print(f"  OOS exam starts: {len(oos_starts)} business days (P1 feasible)")
+    print(f"  OOS data ends:   {last_data_date.date()}")
 
-    # Year-by-year, grouped by rolling-window start year so totals match the optimizer.
+    def run_exam_batch(starts, label):
+        results = {"funded": 0, "p1_pass": 0, "fail_dd": 0, "fail_ddd": 0,
+                    "fail_profit": 0, "fail_p2": 0, "n": len(starts),
+                    "days_to_fund": [], "p1_days": []}
+        for start in starts:
+            r = simulate_exam(
+                streams, DECK, start,
+                daily_loss_cap_pct=EXAM_CONFIG["daily_cap"],
+                combo_daily_max_losses=EXAM_CONFIG["cooldown"],
+                risk_per_trade=EXAM_CONFIG["risk_per_trade"],
+                p2_risk_per_trade=EXAM_CONFIG["p2_risk_per_trade"],
+                max_instr_per_day=EXAM_CONFIG["max_instr"],
+                max_daily_losses=EXAM_CONFIG["max_losses"],
+            )
+            if r["exam"] == "FUNDED":
+                results["funded"] += 1
+                total_days = r["p1"]["days_used"] + r["p2"]["days_used"]
+                results["days_to_fund"].append(total_days)
+            if r["p1"]["outcome"] == "PASS":
+                results["p1_pass"] += 1
+                results["p1_days"].append(r["p1"]["days_used"])
+            if r["p1"]["outcome"] == "FAIL_DD": results["fail_dd"] += 1
+            if r["p1"]["outcome"] == "FAIL_DAILY_DD": results["fail_ddd"] += 1
+            if r["p1"]["outcome"] == "FAIL_PROFIT": results["fail_profit"] += 1
+            if r["exam"] == "FAIL_P2": results["fail_p2"] += 1
+        return results
+
+    # Year-by-year breakdown
     print(f"\n{'='*120}")
-    print(f"  YEAR-BY-YEAR EXAM RESULTS")
+    print(f"  YEAR-BY-YEAR EXAM RESULTS (every business day)")
     print(f"{'='*120}")
-    print(f"  {'Year':<6s} {'Win':>4s} {'P1 Pass':>8s} {'P1%':>6s} {'Funded':>8s} "
-          f"{'Fund%':>6s} {'DD Fail':>8s} {'DDD Fail':>9s} {'Prof Fail':>10s} {'Type':>4s}")
-    print(f"  {'-'*85}")
+    print(f"  {'Year':<6s} {'Exams':>6s} {'P1Pass':>7s} {'P1%':>6s} {'Funded':>7s} "
+          f"{'Fund%':>6s} {'AvgDays':>8s} {'DD':>5s} {'DDD':>5s} {'Prof':>5s} {'P2F':>5s} {'Type':>4s}")
+    print(f"  {'-'*90}")
 
     total_is_funded = 0
     total_is_n = 0
     total_oos_funded = 0
     total_oos_n = 0
+    all_is_days_to_fund = []
+    all_oos_days_to_fund = []
 
-    for year in range(2016, 2026):
-        if year < 2025:
-            year_windows = [w for w in is_windows if w.year == year]
+    for year in range(2016, 2027):
+        if year < 2026:
+            year_starts = [s for s in is_starts if s.year == year]
         else:
-            year_windows = [w for w in oos_windows if w.year == year]
+            year_starts = [s for s in oos_starts if s.year == year]
 
-        funded = p1_pass = dd_fails = ddd_fails = prof_fails = 0
+        if not year_starts:
+            continue
 
-        for start in year_windows:
-            r = simulate_exam(
-                streams, DECK, start,
-                daily_loss_cap_pct=EXAM_CONFIG["daily_cap"],
-                combo_daily_max_losses=EXAM_CONFIG["cooldown"],
-                p1_risk_factor=EXAM_CONFIG["p1_rf"],
-                p2_risk_factor=EXAM_CONFIG["p2_rf"],
-                max_instr_per_day=EXAM_CONFIG["max_instr"],
-                max_daily_losses=EXAM_CONFIG["max_losses"],
-            )
-            if r["exam"] == "FUNDED": funded += 1
-            if r["p1"]["outcome"] == "PASS": p1_pass += 1
-            if r["p1"]["outcome"] == "FAIL_DD": dd_fails += 1
-            if r["p1"]["outcome"] == "FAIL_DAILY_DD": ddd_fails += 1
-            if r["p1"]["outcome"] == "FAIL_PROFIT": prof_fails += 1
+        yr = run_exam_batch(year_starts, str(year))
+        n = yr["n"]
+        tag = "OOS" if year >= 2026 else "IS"
+        mark = " <<<" if year >= 2026 else ""
 
-        n = len(year_windows)
-        tag = "OOS" if year >= 2025 else "IS"
-        mark = " <<<" if year >= 2025 else ""
-
-        if year < 2025:
-            total_is_funded += funded
+        if year < 2026:
+            total_is_funded += yr["funded"]
             total_is_n += n
+            all_is_days_to_fund.extend(yr["days_to_fund"])
         else:
-            total_oos_funded += funded
+            total_oos_funded += yr["funded"]
             total_oos_n += n
+            all_oos_days_to_fund.extend(yr["days_to_fund"])
 
-        print(f"  {year:<6d} {n:>4d} {p1_pass:>3d}/{n:<4d} {p1_pass/n*100:>5.1f}% "
-              f"{funded:>3d}/{n:<4d} {funded/n*100:>5.1f}% "
-              f"{dd_fails:>8d} {ddd_fails:>9d} {prof_fails:>10d} {tag:>4s}{mark}")
+        avg_days = f"{np.mean(yr['days_to_fund']):.0f}" if yr["days_to_fund"] else "-"
+        p1_pct = yr["p1_pass"] / n * 100 if n else 0
+        f_pct = yr["funded"] / n * 100 if n else 0
+
+        print(f"  {year:<6d} {n:>6d} {yr['p1_pass']:>7d} {p1_pct:>5.1f}% {yr['funded']:>7d} "
+              f"{f_pct:>5.1f}% {avg_days:>8s} {yr['fail_dd']:>5d} {yr['fail_ddd']:>5d} "
+              f"{yr['fail_profit']:>5d} {yr['fail_p2']:>5d} {tag:>4s}{mark}")
 
     is_rate = total_is_funded / total_is_n * 100 if total_is_n else 0
     oos_rate = total_oos_funded / total_oos_n * 100 if total_oos_n else 0
+    is_avg_days = np.mean(all_is_days_to_fund) if all_is_days_to_fund else 0
+    oos_avg_days = np.mean(all_oos_days_to_fund) if all_oos_days_to_fund else 0
 
-    print(f"\n  TOTAL IS:  {total_is_funded}/{total_is_n} = {is_rate:.1f}%")
-    print(f"  TOTAL OOS: {total_oos_funded}/{total_oos_n} = {oos_rate:.1f}%")
+    print(f"\n  TOTAL IS:  {total_is_funded}/{total_is_n} = {is_rate:.1f}% "
+          f"(avg {is_avg_days:.0f} days to fund)")
+    print(f"  TOTAL OOS: {total_oos_funded}/{total_oos_n} = {oos_rate:.1f}% "
+          f"(avg {oos_avg_days:.0f} days to fund)")
     print(f"  Gap: {is_rate - oos_rate:+.1f}pp")
 
-    # Detailed OOS breakdown
+    # Detailed OOS: show every start date result
     print(f"\n{'='*120}")
-    print(f"  2025 OOS — DETAILED BREAKDOWN")
+    print(f"  2026 OOS (FTMO data) — DETAILED BREAKDOWN (every business day)")
     print(f"{'='*120}")
-    print(f"  {'Window':<12s} {'P1':>14s} {'P1 Prof':>8s} {'P1 DD':>6s} "
+    print(f"  {'Start':<12s} {'P1':>14s} {'P1 Prof':>8s} {'P1 DD':>6s} {'P1 Days':>8s} "
           f"{'P2':>14s} {'P2 Prof':>8s} {'Exam':>10s}")
-    print(f"  {'-'*80}")
+    print(f"  {'-'*90}")
 
-    for start in oos_windows:
+    for start in oos_starts:
         r = simulate_exam(
             streams, DECK, start,
             daily_loss_cap_pct=EXAM_CONFIG["daily_cap"],
             combo_daily_max_losses=EXAM_CONFIG["cooldown"],
-            p1_risk_factor=EXAM_CONFIG["p1_rf"],
-            p2_risk_factor=EXAM_CONFIG["p2_rf"],
+            risk_per_trade=EXAM_CONFIG["risk_per_trade"],
+            p2_risk_per_trade=EXAM_CONFIG["p2_risk_per_trade"],
             max_instr_per_day=EXAM_CONFIG["max_instr"],
             max_daily_losses=EXAM_CONFIG["max_losses"],
         )
@@ -533,17 +686,19 @@ def main():
         p2_prof = f"{r['p2']['profit_pct']:+.1f}%" if r["p2"] else "-"
         marker = " <<<" if r["exam"] == "FUNDED" else ""
         print(f"  {str(start.date()):<12s} {p1['outcome']:>14s} {p1['profit_pct']:>+7.1f}% "
-              f"{p1['max_dd']:>5.1f}% {p2_out:>14s} {p2_prof:>8s} {r['exam']:>10s}{marker}")
+              f"{p1['max_dd']:>5.1f}% {p1['days_used']:>8d} "
+              f"{p2_out:>14s} {p2_prof:>8s} {r['exam']:>10s}{marker}")
 
     # ══════════════════════════════════════════════════════════════
     # PHASE 2: FUNDED SURVIVAL
     # ══════════════════════════════════════════════════════════════
 
     print(f"\n{'='*120}")
-    print(f"  FUNDED ACCOUNT SURVIVAL — RF{FUNDED_CONFIG['risk_factor']} "
+    print(f"  FUNDED ACCOUNT SURVIVAL — R{FUNDED_CONFIG['risk_per_trade']*100:.1f}% "
           f"DC{FUNDED_CONFIG['daily_cap']} CD{FUNDED_CONFIG['cooldown']}")
     print(f"{'='*120}")
 
+    # Sample every 60 days (full bday range would be too many for 18mo sims)
     funded_windows = pd.date_range("2016-01-01", "2024-07-01", freq="60D")
     survival_results = []
 
@@ -551,7 +706,7 @@ def main():
         fund_start = start + timedelta(days=90)
         sr = simulate_funded(
             streams, DECK, fund_start,
-            risk_factor=FUNDED_CONFIG["risk_factor"],
+            risk_per_trade=FUNDED_CONFIG["risk_per_trade"],
             daily_cap=FUNDED_CONFIG["daily_cap"],
             cooldown=FUNDED_CONFIG["cooldown"],
             max_instr=FUNDED_CONFIG["max_instr"],
@@ -593,7 +748,8 @@ def main():
     print(f"{'='*120}")
 
     exam_cost = 40  # EUR
-    fund_rate = min(is_rate, oos_rate) / 100 if oos_rate > 0 else is_rate / 200
+    # Use OOS rate if available, otherwise conservative half of IS
+    fund_rate = oos_rate / 100 if total_oos_n >= 10 and oos_rate > 0 else is_rate / 200
     monthly_income_5k = avg_pnl_mo * 0.05 * 0.8
 
     print(f"\n  Fund rate: {fund_rate*100:.1f}% | Avg survival: {avg_months:.1f}mo")
@@ -639,11 +795,14 @@ def main():
     print(f"  FINAL VERDICT")
     print(f"{'='*120}")
 
-    print(f"\n  EXAM MODE:   DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
-          f"P2x{EXAM_CONFIG['p2_rf']} MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
+    print(f"\n  EXAM MODE:   R{EXAM_CONFIG['risk_per_trade']*100:.1f}% "
+          f"P2R{EXAM_CONFIG['p2_risk_per_trade']*100:.1f}% "
+          f"DC{EXAM_CONFIG['daily_cap']} CD{EXAM_CONFIG['cooldown']} "
+          f"MI{EXAM_CONFIG['max_instr']} ML{EXAM_CONFIG['max_losses']}")
     print(f"    -> {is_rate:.1f}% IS / {oos_rate:.1f}% OOS funded rate")
 
-    print(f"\n  FUNDED MODE: RF{FUNDED_CONFIG['risk_factor']} DC{FUNDED_CONFIG['daily_cap']} "
+    print(f"\n  FUNDED MODE: R{FUNDED_CONFIG['risk_per_trade']*100:.1f}% "
+          f"DC{FUNDED_CONFIG['daily_cap']} "
           f"CD{FUNDED_CONFIG['cooldown']} MI{FUNDED_CONFIG['max_instr']} ML{FUNDED_CONFIG['max_losses']}")
     print(f"    -> {avg_months:.1f}mo avg survival, ${avg_pnl_mo * 0.05:+,.0f} gross / "
           f"${avg_pnl_mo * 0.05 * 0.8:+,.0f} net per $5K")

@@ -44,7 +44,7 @@ from algosbz.risk.manager import RiskManager
 from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 from algosbz.live.runtime import utc_now
 
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 from algosbz.live import telegram
 
 # ─── Configuration ──────────────────────────────────────────────

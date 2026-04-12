@@ -35,7 +35,7 @@ from algosbz.backtest.engine import BacktestEngine
 from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 from algosbz.live.runtime import ensure_aware_utc, utc_now
 
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)

@@ -21,7 +21,9 @@
       "Bash(ls -lthS /c/Users/mateo/Desktop/Proyectos/AlgoSbz/scripts/*.py)",
       "Bash(xargs basename:*)",
       "Bash(grep \"module.*algosbz\\\\.strategy\" /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/dashboard/pages/*.py)",
-      "Bash(python -X utf8)"
+      "Bash(python -X utf8)",
+      "Bash(python -X utf8 scripts/optimize_exam_params.py)",
+      "Bash(ls scripts/*.py)"
     ]
   }
 }

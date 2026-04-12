@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 
 from algosbz.live.mt5_connector import MT5Connector
 from algosbz.core.enums import SignalAction
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 
 # Decorr16_A deck
 DECK = [

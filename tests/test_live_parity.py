@@ -28,7 +28,7 @@ from algosbz.core.enums import SignalAction
 from algosbz.core.models import Signal
 from algosbz.data.loader import DataLoader
 from algosbz.data.resampler import resample
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 
 
 # ─── Helpers ────────────────────────────────────────────────────────

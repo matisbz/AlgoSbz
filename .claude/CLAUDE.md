@@ -21,4 +21,5 @@ Reglas de las prop firms y como debe de simularse en backtest los examenes:
 - Esta prohibido hacer martin gala
 - El minimo de dias de trading en todo el challenge (fase 1 y 2) debe de ser 4.
 - Las simulaciones deben hacerse suponiendo que compramos una evaluacion de una cuenta de 10k.
+- Deben de hacerse un monton de simulaciones empezando en un dia aleatorio y de ahi contabilizar cuantos challegue se pasan, cuantos se suspende y cuantos dias de media se tarda en aprobar.
 

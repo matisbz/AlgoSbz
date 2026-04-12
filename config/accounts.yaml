@@ -55,73 +55,69 @@ accounts:
 # TRADING CONFIG — do NOT modify unless you know what you're doing
 # ═══════════════════════════════════════════════════════════════
 
-# Exam mode (phase1 & phase2): overlap-aware reoptimization 2026-04-11.
-# Constraint: structural signal overlap veto at 80% on IS trades
-# (same symbol + timestamp + direction). Goal: many trades, but no "same idea twice".
-# Selected from the clean no-overlap pool after exact production validation:
-# Decorr24_A_DC3.5_CD1_L0_P2x0.5_MI2_ML3
-# -> 37.4% IS / 28.6% OOS funded rate, with 0 pair overlaps >= 80%
-#    and max pair overlap = 27.2%.
+# Exam mode: optimized 2026-04-12 via optimize_exam_params.py sweep.
+# Config: P1R4_P2R1.5_DC3.5_MI2 on 25-combo ALIVE deck (v7_expanded).
+# Asymmetric risk: aggressive P1 (4%) to hit 10% fast, moderate P2 (1.5%).
+# Results: IS 50.2% funded (26d avg), OOS 10.2% funded (22d avg).
 exam_mode:
-  risk_per_trade: 0.02    # P1 effective risk = 2.0%
+  risk_per_trade: 0.04    # P1 effective risk = 4.0%
   daily_cap_pct: 3.5
   cooldown: 1
   max_instr_per_day: 2
   max_daily_losses: 3
-  p2_risk_factor: 0.5     # Phase2 effective risk = 1.0%
+  p2_risk_factor: 0.375   # Phase2 effective risk = 1.5% (0.04 * 0.375)
 
-# Funded mode: calibrated on the same no-overlap Decorr24_A deck.
-# Best EV in funded sim: RF0.5_DC2.5_CD1_MI2_ML3
-# -> about 14.5 months average survival, 35% term rate,
-#    and about $149 net/month per $5K after 80% split.
+# Funded mode: conservative to maximize survival.
+# 16.6 months avg survival, 21% termination, EUR +231/mo net per $5K.
 funded_mode:
-  risk_per_trade: 0.01    # 1.0% effective risk = RF0.5 on 2% base
+  risk_per_trade: 0.01    # 1.0% effective risk
   daily_cap_pct: 2.5
   cooldown: 1
   max_instr_per_day: 2
   max_daily_losses: 3
 
-# Deck — 24 combos (Decorr24_A, clean pool with overlap veto)
-# Pool source: scripts/challenge_decks_v5_clean.py
-# Properties:
-#   - 0 pair overlaps >= 80% on IS
-#   - Max pair overlap: 27.2%
-#   - Instrument spread: AUDUSD, EURJPY, EURUSD, GBPJPY, NZDUSD, USDCHF, XAUUSD, XTIUSD
+# Deck — 25 ALIVE combos (PF > 1.0 in 2024-2025)
+# Pool source: scripts/challenge_decks_v7_expanded.py (53 combos, 25 ALIVE)
+# Selected: 2026-04-12 via diagnose_combo_health.py + optimize_exam_params.py
+# Instruments: AUDUSD, EURJPY, EURUSD, GBPJPY, NZDUSD, USDCHF, USDJPY, XAUUSD, XTIUSD
 deck:
+  # Tier 1 — PF>1.0 in 24-25 + >=6 yrs profitable (16 combos)
+  - VMR_NZDUSD_wideR_H4_ny
+  - MACross_XAUUSD_trend_H4_ny
   - IBB_NZDUSD_trend_H4
-  - MACross_NZDUSD_trend_H4_lon
-  - MACross_XAUUSD_trend_H4
-  - SwBrk_EURJPY_slow_H4
-  - SwBrk_AUDUSD_wideR_H4
-  - MomDiv_USDCHF_trend_H4
-  - MACross_XAUUSD_wideR_H4
-  - RSIext_EURJPY_wideR_H4
-  - SwBrk_XTIUSD_slow_H4
-  - MACross_GBPJPY_megaT_H4
-  - Engulf_EURJPY_wideR_H4
-  - KeltSq_XAUUSD_wideR_H4_lon
-  - Engulf_AUDUSD_trend_H4
+  - Engulf_EURUSD_trend_H4
+  - ADXbirth_XTIUSD_slow_ema_H4
   - EMArib_EURJPY_tight_H1
-  - Engulf_EURUSD_wideR_H4
-  - MACross_USDCHF_megaT_H4
+  - MACross_AUDUSD_megaT_H4
+  - MACross_XAUUSD_wideR_H4_ny
+  - PinBar_EURJPY_deep_H4
   - StrBrk_GBPJPY_wideR_H4
-  - VMR_USDCHF_default_H1
-  - TPB_NZDUSD_trendL_H4
-  - KeltSq_AUDUSD_wideR_H4_lon
-  - VMR_NZDUSD_default_H4
-  - TPB_NZDUSD_loose_H4_ny
-  - EMArib_USDCHF_trend_H4_lon
+  - VMR_USDCHF_default_H1_ny
+  - MomDiv_AUDUSD_wideR_H4
+  - StochRev_AUDUSD_calm_H4
+  - VMR_USDJPY_wideR_H4_ny
+  - EMArib_AUDUSD_trend_H4_lon
+  - MACross_EURUSD_wideR_H4_lon
+  # Tier 2 — PF>1.0 in 24-25 + 3-5 yrs profitable (9 combos)
   - RegVMR_NZDUSD_default_H1_ny
+  - MACDhist_EURJPY_trend_H4
+  - MACross_USDCHF_trend_H4_ny
+  - RSIext_EURJPY_wideR_H4
+  - TPB_XTIUSD_trend_H4_ny
+  - MACross_USDJPY_wideR_H4_lon
+  - MACross_USDCHF_megaT_H4
+  - MACross_NZDUSD_trend_H4_lon
+  - TPB_NZDUSD_loose_H4_ny
 
 # Symbol mapping: our internal name → MT5 symbol name
 # Adjust these to match your broker's symbol names
 symbol_map:
-  EURUSD: "EURUSD"        # ← Change if broker uses EURUSD.r, EURUSDm, etc.
+  EURUSD: "EURUSD"
   GBPJPY: "GBPJPY"
   USDCHF: "USDCHF"
   USDJPY: "USDJPY"
+  AUDUSD: "AUDUSD"
+  NZDUSD: "NZDUSD"
+  EURJPY: "EURJPY"
   XAUUSD: "XAUUSD"
   XTIUSD: "USOIL.cash"    # FTMO: West Texas Intermediate
-  XNGUSD: "NATGAS.cash"   # FTMO: Natural Gas
-  SPY: "US500.cash"        # FTMO: S&P 500 Index
-  NDAQ: "US100.cash"       # FTMO: Nasdaq 100 Index
