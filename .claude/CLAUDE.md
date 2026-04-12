@@ -8,7 +8,8 @@ Always prioritize:
 - no duplicate economic exposure,
 - reproducible research,
 - prop-firm rule compliance,
-- conservative assumptions.
+- conservative assumptions,
+- Refresh project memory after important milestones.
 
 When the task involves strategy design, backtesting, combo construction, validation, or deployment logic, use the `prop-trader` skill.
 
