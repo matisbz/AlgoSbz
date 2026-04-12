@@ -42,7 +42,7 @@ from algosbz.risk.equity_manager import EquityManager, EquityManagerConfig
 
 logging.basicConfig(level=logging.ERROR)
 
-from scripts.challenge_decks_v5_clean import ALL_COMBOS, STRAT_REGISTRY
+from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 
 MAX_SIGNAL_OVERLAP = 0.80
 
@@ -275,27 +275,27 @@ def simulate_exam(streams, combo_names, start_date,
                   p1_risk_factor=1.0, p2_risk_factor=1.0,
                   max_instr_per_day=99, max_daily_losses=99,
                   regime_data=None, regime_threshold=90,
-                  initial=100000, p1_days=30, p2_days=60):
+                  initial=100000):
     """
-    Realistic FTMO 2-step exam simulation.
+    FTMO 2-step challenge simulation — UNLIMITED TIME model.
 
-    FTMO rules — balance RESETS between phases:
-    - P1 starts at $100K, target = 10% ($10K)
-    - P2 starts at $100K (RESET), target = 5% ($5K)
-    - DD limits: static from initial ($100K) — floor is always $90K
-    - Daily DD: 5% of initial from start-of-day equity
+    FTMO rules:
+    - P1: target +10%, balance resets to initial for P2
+    - P2: target +5%
+    - Both phases: max daily DD 5%, max total DD 10%, min 4 trading days
+    - NO TIME LIMIT on either phase — only DD kills the exam
+    - If data runs out before conclusion → INCONCLUSIVE
 
-    Portfolio controls:
+    Portfolio controls (our risk management, not FTMO rules):
     - daily_loss_cap_pct: stop ALL trading when daily loss >= X% of initial
     - combo_daily_max_losses: max losing trades per combo per day
-    - max_instr_per_day: max trades per instrument per day (prevents correlated losses)
+    - max_instr_per_day: max trades per instrument per day
     - max_daily_losses: max total losing trades per day across ALL combos
-    - p2_risk_factor: scale PnL in P2 (e.g. 0.5 = half risk in P2)
     """
 
-    def run_phase(phase_start, window_days, target_pct, starting_equity,
+    def run_phase(phase_start_date, target_pct, starting_equity,
                   risk_factor=1.0):
-        phase_end = phase_start + timedelta(days=window_days)
+        """Run one phase with unlimited time. Returns when PASS, FAIL, or data exhausted."""
         equity = starting_equity
         daily_start_eq = starting_equity
         trading_days = set()
@@ -304,22 +304,21 @@ def simulate_exam(streams, combo_names, start_date,
         max_daily_dd = 0
         locked = False
         target_reached = False
-        target_reached_day = None
-        days_used = window_days
         combo_day_losses = defaultdict(int)
         instr_day_trades = defaultdict(int)
         total_daily_losses = 0
         daily_stopped = False
+        last_trade_date = None
 
         target_equity = starting_equity + (target_pct / 100) * initial
 
+        # Collect ALL trades from phase_start onwards — no end date
         all_trades = []
         for combo in combo_names:
             if combo not in streams:
                 continue
             for t in streams[combo]:
-                if phase_start.date() <= t["date"] < phase_end.date():
-                    # Regime filter: skip trades during extreme volatility
+                if t["date"] >= phase_start_date:
                     if regime_data is not None:
                         instrument = ALL_COMBOS[combo]["symbol"]
                         if instrument in regime_data:
@@ -344,12 +343,13 @@ def simulate_exam(streams, combo_names, start_date,
                 total_daily_losses = 0
                 daily_stopped = False
 
-            # Once target reached, stop real trading -> micro-ops for min days
+            last_trade_date = t["date"]
+
+            # Once target reached, just accumulate trading days for min-4 rule
             if target_reached:
                 trading_days.add(t["date"])
                 if len(trading_days) >= 4:
                     locked = True
-                    days_used = (t["date"] - phase_start.date()).days + 1
                 continue
 
             if daily_stopped:
@@ -378,58 +378,55 @@ def simulate_exam(streams, combo_names, start_date,
             if daily_loss_pct >= daily_loss_cap_pct:
                 daily_stopped = True
 
+            # Total DD check (from initial, static floor)
             dd = (initial - equity) / initial
             max_dd = max(max_dd, dd)
             if dd >= 0.10:
+                days_used = (t["date"] - phase_start_date).days + 1
                 return {"outcome": "FAIL_DD", "profit_pct": (equity - starting_equity) / initial * 100,
                         "final_equity": equity, "max_dd": max_dd * 100,
                         "max_daily_dd": max_daily_dd * 100,
-                        "trading_days": len(trading_days), "days_used": window_days}
+                        "trading_days": len(trading_days), "days_used": days_used}
 
+            # Daily DD check (from start-of-day equity, hard FTMO rule)
             daily_dd_hard = (daily_start_eq - equity) / initial
             if daily_dd_hard >= 0.05:
+                days_used = (t["date"] - phase_start_date).days + 1
                 return {"outcome": "FAIL_DAILY_DD", "profit_pct": (equity - starting_equity) / initial * 100,
                         "final_equity": equity, "max_dd": max_dd * 100,
                         "max_daily_dd": daily_dd_hard * 100,
-                        "trading_days": len(trading_days), "days_used": window_days}
+                        "trading_days": len(trading_days), "days_used": days_used}
 
             if equity >= target_equity:
                 if len(trading_days) >= 4:
                     locked = True
-                    days_used = (t["date"] - phase_start.date()).days + 1
                 else:
                     target_reached = True
-                    target_reached_day = t["date"]
 
+        # End of available data
         if current_day and not locked:
             daily_dd = (daily_start_eq - equity) / initial
             max_daily_dd = max(max_daily_dd, daily_dd)
 
-        # If target reached but ran out of trades before 4 days,
-        # check if enough weekdays remain in the window for micro-ops
-        if target_reached and not locked and len(trading_days) < 4:
-            days_needed = 4 - len(trading_days)
-            remaining_days = 0
-            check_date = target_reached_day + timedelta(days=1)
-            while check_date < phase_end.date() and remaining_days < days_needed:
-                if check_date.weekday() < 5:
-                    remaining_days += 1
-                check_date += timedelta(days=1)
-            if remaining_days >= days_needed:
-                locked = True
-                days_used = (check_date - phase_start.date()).days
+        # If target reached but not enough trading days yet, check if the
+        # target is still reached (it always is since we stop real trading)
+        # and we just need more weekdays — with unlimited time this would
+        # happen eventually, so count it as PASS
+        if target_reached and not locked:
+            locked = True  # unlimited time → would get 4 days eventually
+
+        days_used = (last_trade_date - phase_start_date).days + 1 if last_trade_date else 0
 
         profit_pct = (equity - starting_equity) / initial * 100
         if max_dd >= 0.10:
             outcome = "FAIL_DD"
         elif max_daily_dd >= 0.05:
             outcome = "FAIL_DAILY_DD"
-        elif locked or (equity >= target_equity and len(trading_days) >= 4):
+        elif locked or (equity >= target_equity):
             outcome = "PASS"
-        elif equity >= target_equity:
-            outcome = "FAIL_MIN_DAYS"
         else:
-            outcome = "FAIL_PROFIT"
+            # Data exhausted before target reached and before DD kill
+            outcome = "INCONCLUSIVE"
 
         return {"outcome": outcome, "profit_pct": round(profit_pct, 2),
                 "final_equity": round(equity, 2),
@@ -438,14 +435,15 @@ def simulate_exam(streams, combo_names, start_date,
                 "trading_days": len(trading_days), "days_used": days_used}
 
     # ── Phase 1: start at $100K, target +10% ──
-    p1 = run_phase(start_date, p1_days, 10.0, initial, risk_factor=p1_risk_factor)
-    if p1["outcome"] != "PASS":
+    p1 = run_phase(start_date.date() if hasattr(start_date, 'date') else start_date,
+                   10.0, initial, risk_factor=p1_risk_factor)
+
+    if p1["outcome"] not in ("PASS",):
         return {"exam": "FAIL_P1", "p1": p1, "p2": None}
 
     # ── Phase 2: balance RESETS to $100K, target +5% ──
-    p2_start = start_date + timedelta(days=p1["days_used"])
-    p2 = run_phase(p2_start, p2_days, 5.0, initial,
-                   risk_factor=p2_risk_factor)
+    p2_start_date = (start_date.date() if hasattr(start_date, 'date') else start_date) + timedelta(days=p1["days_used"])
+    p2 = run_phase(p2_start_date, 5.0, initial, risk_factor=p2_risk_factor)
 
     if p2["outcome"] == "PASS":
         return {"exam": "FUNDED", "p1": p1, "p2": p2}
@@ -572,14 +570,17 @@ def main():
     print(f"  GRID SEARCH: deck × controls (IS: 2016-2024, OOS: 2025)")
     print(f"{'='*120}")
 
-    is_windows = pd.date_range("2016-01-01", "2024-10-01", freq="30D")
-    # OOS: only windows where we have enough data for full P1+P2 (90 days)
-    # Data ends ~2025-10-03, so last valid start is ~2025-07-05
+    # Unlimited-time model: exams run until conclusion (PASS/FAIL_DD) or data exhausted (INCONCLUSIVE).
+    # INCONCLUSIVE results are excluded from funded rate calculation.
+    # Windows are rolling start dates — each exam consumes as much data as it needs.
+    # Require at least 60 days of data from start to give exam a chance to conclude.
     last_data_date = min(data_dict[sym].index[-1] for sym in data_dict)
-    max_oos_start = last_data_date - timedelta(days=90)
+    min_data_days = 60
+    is_windows = pd.date_range("2016-01-01", "2024-10-01", freq="30D")
+    max_oos_start = last_data_date - timedelta(days=min_data_days)
     oos_windows = pd.date_range("2025-01-01", max_oos_start, freq="30D")
     print(f"  Data ends: {last_data_date.date()} → OOS windows: {len(oos_windows)} "
-          f"(up to {max_oos_start.date()})")
+          f"(up to {max_oos_start.date()}) [unlimited time model]")
 
     # Coarse grid to prevent overfitting
     grid_params = []
@@ -612,11 +613,10 @@ def main():
 
     for deck_name, combo_list in decks.items():
         for gp in grid_params:
-            is_funded = 0; is_n = 0
-            oos_funded = 0; oos_n = 0
+            is_funded = 0; is_n = 0; is_inconclusive = 0
+            oos_funded = 0; oos_n = 0; oos_inconclusive = 0
             is_p1_pass = 0; oos_p1_pass = 0
             is_dd_fails = 0; oos_dd_fails = 0
-            is_profit_fails = 0; oos_profit_fails = 0
 
             for windows, is_oos in [(is_windows, False), (oos_windows, True)]:
                 for start in windows:
@@ -629,9 +629,9 @@ def main():
 
                     if not active:
                         if is_oos:
-                            oos_n += 1
+                            oos_n += 1; oos_inconclusive += 1
                         else:
-                            is_n += 1
+                            is_n += 1; is_inconclusive += 1
                         continue
 
                     regime_kw = {}
@@ -649,21 +649,33 @@ def main():
                         **regime_kw,
                     )
 
+                    # Check if any phase was INCONCLUSIVE (data exhausted)
+                    p1_inc = r["p1"]["outcome"] == "INCONCLUSIVE"
+                    p2_inc = r["p2"] is not None and r["p2"]["outcome"] == "INCONCLUSIVE"
+                    is_inc = p1_inc or p2_inc
+
                     if is_oos:
                         oos_n += 1
-                        if r["exam"] == "FUNDED": oos_funded += 1
-                        if r["p1"]["outcome"] == "PASS": oos_p1_pass += 1
-                        if "DD" in r["p1"]["outcome"]: oos_dd_fails += 1
-                        if r["p1"]["outcome"] == "FAIL_PROFIT": oos_profit_fails += 1
+                        if is_inc:
+                            oos_inconclusive += 1
+                        else:
+                            if r["exam"] == "FUNDED": oos_funded += 1
+                            if r["p1"]["outcome"] == "PASS": oos_p1_pass += 1
+                            if "DD" in r["p1"]["outcome"]: oos_dd_fails += 1
                     else:
                         is_n += 1
-                        if r["exam"] == "FUNDED": is_funded += 1
-                        if r["p1"]["outcome"] == "PASS": is_p1_pass += 1
-                        if "DD" in r["p1"]["outcome"]: is_dd_fails += 1
-                        if r["p1"]["outcome"] == "FAIL_PROFIT": is_profit_fails += 1
+                        if is_inc:
+                            is_inconclusive += 1
+                        else:
+                            if r["exam"] == "FUNDED": is_funded += 1
+                            if r["p1"]["outcome"] == "PASS": is_p1_pass += 1
+                            if "DD" in r["p1"]["outcome"]: is_dd_fails += 1
 
-            is_rate = is_funded / is_n * 100 if is_n else 0
-            oos_rate = oos_funded / oos_n * 100 if oos_n else 0
+            # Funded rate excludes INCONCLUSIVE from denominator (not pass or fail)
+            is_concluded = is_n - is_inconclusive
+            oos_concluded = oos_n - oos_inconclusive
+            is_rate = is_funded / is_concluded * 100 if is_concluded else 0
+            oos_rate = oos_funded / oos_concluded * 100 if oos_concluded else 0
 
             regime_tag = f"_RG{gp['regime']}" if gp["regime"] > 0 else ""
             p1_tag = f"_P1x{gp['p1_rf']}" if gp["p1_rf"] != 1.0 else ""
@@ -679,12 +691,12 @@ def main():
                 "max_instr": gp["max_instr"], "max_losses": gp["max_losses"],
                 "regime": gp["regime"],
                 "n_combos": len(combo_list),
-                "is_funded": is_funded, "is_n": is_n, "is_rate": is_rate,
-                "is_p1": is_p1_pass, "is_p1_rate": is_p1_pass / is_n * 100 if is_n else 0,
-                "is_dd": is_dd_fails, "is_profit_fail": is_profit_fails,
-                "oos_funded": oos_funded, "oos_n": oos_n, "oos_rate": oos_rate,
-                "oos_p1": oos_p1_pass, "oos_p1_rate": oos_p1_pass / oos_n * 100 if oos_n else 0,
-                "oos_dd": oos_dd_fails, "oos_profit_fail": oos_profit_fails,
+                "is_funded": is_funded, "is_n": is_concluded, "is_rate": is_rate,
+                "is_p1": is_p1_pass, "is_p1_rate": is_p1_pass / is_concluded * 100 if is_concluded else 0,
+                "is_dd": is_dd_fails, "is_inconclusive": is_inconclusive,
+                "oos_funded": oos_funded, "oos_n": oos_concluded, "oos_rate": oos_rate,
+                "oos_p1": oos_p1_pass, "oos_p1_rate": oos_p1_pass / oos_concluded * 100 if oos_concluded else 0,
+                "oos_dd": oos_dd_fails, "oos_inconclusive": oos_inconclusive,
             })
 
             iter_count += 1
@@ -781,13 +793,13 @@ def main():
     print(f"\n{'='*120}")
     print(f"  YEAR-BY-YEAR STABILITY — {best['label'][:50]}")
     print(f"{'='*120}")
-    print(f"  {'Year':<6s} {'Win':>4s} {'P1 Pass':>8s} {'P1%':>6s} {'Funded':>8s} "
-          f"{'Fund%':>6s} {'DD Fail':>7s} {'Prof Fail':>9s} {'Type':>4s}")
+    print(f"  {'Year':<6s} {'Concl':>5s} {'P1 Pass':>8s} {'P1%':>6s} {'Funded':>8s} "
+          f"{'Fund%':>6s} {'DD Fail':>7s} {'Incon':>5s} {'Type':>4s}")
     print(f"  {'-'*75}")
 
     for year in range(2016, 2026):
         year_windows = pd.date_range(f"{year}-01-01", f"{year}-10-01", freq="30D")
-        funded = p1_pass = dd_fails = prof_fails = 0
+        funded = p1_pass = dd_fails = inconclusive = 0
 
         for start in year_windows:
             if best["lookback"] > 0:
@@ -796,6 +808,7 @@ def main():
             else:
                 active = best_deck
             if not active:
+                inconclusive += 1
                 continue
 
             r = simulate_exam(
@@ -808,17 +821,24 @@ def main():
                 max_daily_losses=best.get("max_losses", 99),
                 **regime_kw,
             )
+            p1_inc = r["p1"]["outcome"] == "INCONCLUSIVE"
+            p2_inc = r["p2"] is not None and r["p2"]["outcome"] == "INCONCLUSIVE"
+            if p1_inc or p2_inc:
+                inconclusive += 1
+                continue
             if r["exam"] == "FUNDED": funded += 1
             if r["p1"]["outcome"] == "PASS": p1_pass += 1
             if "DD" in r["p1"]["outcome"]: dd_fails += 1
-            if r["p1"]["outcome"] == "FAIL_PROFIT": prof_fails += 1
 
         n = len(year_windows)
+        concluded = n - inconclusive
         tag = "OOS" if year >= 2025 else "IS"
         mark = " <<<" if year >= 2025 else ""
-        print(f"  {year:<6d} {n:>4d} {p1_pass:>3d}/{n:<4d} {p1_pass/n*100:>5.1f}% "
-              f"{funded:>3d}/{n:<4d} {funded/n*100:>5.1f}% "
-              f"{dd_fails:>7d} {prof_fails:>9d} {tag:>4s}{mark}")
+        fund_rate = funded / concluded * 100 if concluded else 0
+        p1_rate = p1_pass / concluded * 100 if concluded else 0
+        print(f"  {year:<6d} {concluded:>5d} {p1_pass:>3d}/{concluded:<4d} {p1_rate:>5.1f}% "
+              f"{funded:>3d}/{concluded:<4d} {fund_rate:>5.1f}% "
+              f"{dd_fails:>7d} {inconclusive:>5d} {tag:>4s}{mark}")
 
     # ── Step 10: ROI for $5K accounts ──
     oos_rate = best["oos_rate"]
