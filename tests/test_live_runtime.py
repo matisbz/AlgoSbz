@@ -79,7 +79,8 @@ def test_account_level_max_positions_blocks_fourth_trade():
     assert order is None
 
 
-def test_reconcile_account_positions_recovers_untracked_mt5_positions():
+def test_reconcile_account_positions_recovers_untracked_mt5_positions(tmp_path, monkeypatch):
+    monkeypatch.setattr(live_trader, "LOG_PATH", tmp_path / "live_trades.log")
     acct = make_account()
     acct.state.sync_runtime_day(100000, trading_day=datetime(2026, 1, 2).date())
 
@@ -103,6 +104,11 @@ def test_reconcile_account_positions_recovers_untracked_mt5_positions():
     assert acct.open_positions["Engulf_EURUSD_wideR_H4"] == 12345
     assert acct.state.total_trades == 1
     assert acct.state._instr_day_trades["EURUSD"] == 1
+
+    history_path = tmp_path / "trade_history.jsonl"
+    rows = [json.loads(line) for line in history_path.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["event"] == "OPEN_RECOVERED"
+    assert rows[-1]["account"] == "TEST"
 
 
 def test_state_persistence_restores_runtime_counters(tmp_path, monkeypatch):
@@ -186,3 +192,47 @@ def test_trading_day_key_respects_reset_hour():
 
     assert trading_day_key(before_reset, reset_hour=5, timezone_name="UTC").isoformat() == "2026-04-10"
     assert trading_day_key(after_reset, reset_hour=5, timezone_name="UTC").isoformat() == "2026-04-11"
+
+
+def test_target_reached_blocks_trading_until_min_days():
+    acct = make_account()
+    acct.state.current_equity = 110000
+    acct.state.trading_days = 3
+
+    can_trade, reason = acct.state.can_trade("Engulf_EURUSD_wideR_H4", "EURUSD")
+
+    assert can_trade is False
+    assert "target reached" in reason
+
+
+def test_phase1_to_phase2_transition_resets_state():
+    acct = make_account()
+    acct.state.current_equity = 110000
+    acct.state.trading_days = 4
+    acct.state.total_pnl = 10000
+
+    transition = acct.state.check_phase_transition()
+
+    assert transition == "phase2"
+    assert acct.state.state == "phase2"
+    assert acct.state.current_equity == acct.state.initial_balance
+    assert acct.state.trading_days == 0
+    assert acct.state.total_pnl == 0.0
+    assert abs(acct.state.risk_per_trade - 0.014) < 1e-12
+
+
+def test_phase2_to_funded_transition_switches_mode_and_resets_state():
+    acct = make_account()
+    acct.state.state = "phase2"
+    acct.state.current_equity = 105000
+    acct.state.trading_days = 4
+    acct.state.total_pnl = 5000
+
+    transition = acct.state.check_phase_transition()
+
+    assert transition == "funded"
+    assert acct.state.state == "funded"
+    assert acct.state.current_equity == acct.state.initial_balance
+    assert acct.state.trading_days == 0
+    assert acct.state.total_pnl == 0.0
+    assert acct.state.daily_cap_pct == 1.5
