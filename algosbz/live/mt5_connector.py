@@ -5,6 +5,7 @@ Each account gets its own connector instance.
 MT5 limitation: only one terminal login at a time, so we rotate accounts.
 """
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -155,11 +156,20 @@ class MT5Connector:
             mt5.TRADE_RETCODE_PRICE_OFF,
         }
 
+        # Ensure symbol is in Market Watch (needed after terminal restart)
+        mt5.symbol_select(mt5_symbol, True)
+
         for attempt in range(max_retries):
-            # Get fresh tick on each attempt
+            # Get fresh tick — may need a brief wait after terminal reconnect
             tick = mt5.symbol_info_tick(mt5_symbol)
+            if tick is None and attempt < max_retries - 1:
+                logger.warning("No tick for %s, waiting 2s (attempt %d/%d)",
+                               mt5_symbol, attempt + 1, max_retries)
+                time.sleep(2)
+                mt5.symbol_select(mt5_symbol, True)
+                continue
             if tick is None:
-                logger.error("No tick for %s", mt5_symbol)
+                logger.error("No tick for %s after %d attempts", mt5_symbol, max_retries)
                 return None
 
             if direction == "BUY":

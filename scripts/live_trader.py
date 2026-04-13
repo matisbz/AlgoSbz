@@ -1205,15 +1205,18 @@ def main():
                                 state=acct.state.state,
                             )
                         else:
-                            # Execution failed — consume signal to match backtest
-                            # (backtest never retries; signal lives for exactly 1 bar)
-                            executed_combos.add(order["combo"])
+                            # Execution failed — keep signal pending for retry.
+                            # In backtest execution never fails, so consuming the
+                            # signal on a transient error (no tick, disconnect)
+                            # creates divergence: the trade is lost AND the next
+                            # bar may generate a duplicate signal that wouldn't
+                            # exist in backtest (because has_position would be True).
                             logger.warning("[%s] Execution failed for %s — "
-                                          "signal consumed (no retry)",
+                                          "signal kept pending for retry",
                                           acct_name, order["combo"])
                             telegram.send(
                                 f"\u26a0\ufe0f <b>EXEC FAIL</b> {acct.state.name}\n"
-                                f"{order['combo']} {order['direction']} — signal consumed"
+                                f"{order['combo']} {order['direction']} — will retry next cycle"
                             )
 
                     # Sync equity after execution

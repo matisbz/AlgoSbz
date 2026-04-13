@@ -23,7 +23,8 @@
       "Bash(grep \"module.*algosbz\\\\.strategy\" /c/Users/mateo/Desktop/Proyectos/AlgoSbz/algosbz/dashboard/pages/*.py)",
       "Bash(python -X utf8)",
       "Bash(python -X utf8 scripts/optimize_exam_params.py)",
-      "Bash(ls scripts/*.py)"
+      "Bash(ls scripts/*.py)",
+      "Bash(python -c \"from datetime import datetime; d1=datetime\\(2026,4,12\\); d2=datetime\\(2026,4,13\\); print\\(f'Apr 12 = {d1.strftime\\(\\\\\"%A\\\\\"\\)}'\\); print\\(f'Apr 13 = {d2.strftime\\(\\\\\"%A\\\\\"\\)}'\\)\")"
     ]
   }
 }

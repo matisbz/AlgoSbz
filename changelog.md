@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-04-13 — Fix ejecución live: tick None + señal consumida en error
+
+### Cambios
+- **`mt5_connector.py` — `place_market_order` robusto post-reconexión**:
+  - Añadido `symbol_select` antes del loop de retries (igual que `get_bars`).
+  - Si `symbol_info_tick` devuelve None, espera 2s y reintenta (hasta max_retries). Antes fallaba inmediatamente.
+  - Causa raíz: tras `mt5.shutdown()` + `mt5.initialize()`, los ticks no están disponibles inmediatamente. `get_bars` (datos históricos) funciona, pero `symbol_info_tick` (tick real-time) necesita que el terminal se suscriba al símbolo primero.
+- **`live_trader.py` — señal NO se consume en error transitorio**:
+  - Antes: si `place_market_order` fallaba, la señal se marcaba como consumida ("to match backtest"). Esto perdía el trade y causaba divergencia: el siguiente bar veía `has_position=False` y podía generar una señal duplicada que en backtest no existiría.
+  - Ahora: la señal se mantiene pending para reintentar en el siguiente ciclo. Si para entonces ya es stale (bar[i+2]), `discard_stale_signals` la limpia automáticamente.
+
+### Qué soluciona
+- Evita perder trades por error transitorio de MT5 post-reconexión.
+- Evita señales "fantasma" que en backtest no existirían (divergencia backtest/live).
+
+---
+
 ## 2026-04-12 — Config óptima + limpieza repo
 
 ### Cambios
