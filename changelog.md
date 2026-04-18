@@ -1,5 +1,19 @@
 ya # Changelog
 
+## 2026-04-18 — Fix: zombie signal retry loop + circuit breaker
+
+### Problema
+Bot en live reintentaba ejecutar el mismo trade (`EMArib_USDJPY_trend_H4`) cada hora indefinidamente cuando `order_send` retornaba `None` (cuenta MT5 sin acceso a trade server). Dos bugs:
+1. `discard_stale_signals()` usaba `last_signal_bar` que se actualiza en cada evaluación de barra, no cuando se generó la señal. El stale check nunca se activaba porque el timestamp avanzaba con cada barra nueva.
+2. Sin límite de reintentos: si la ejecución fallaba permanentemente (cuenta expirada, MT5 desconectado), la señal se reintentaba infinitamente.
+
+### Cambios
+- **Bug 1**: Nuevo dict `pending_signal_bar` que trackea el bar_time cuando se generó la señal pending. `discard_stale_signals()` ahora compara contra este timestamp inmutable en vez de `last_signal_bar`. Se limpia correctamente en `confirm_signal_consumed()` y en discard.
+- **Bug 2**: Circuit breaker con `MAX_EXEC_RETRIES=3`. Tras 3 fallos consecutivos de ejecución para un combo, se abandona la señal y se notifica por Telegram. Counter se resetea en ejecución exitosa.
+
+### Archivos modificados
+- `scripts/live_trader.py`: StrategyManager (`__init__`, `generate_signals`, `confirm_signal_consumed`, `discard_stale_signals`), main loop (circuit breaker), signal restore.
+
 ## 2026-04-13 — Recalibración completa con datos FTMO broker-native
 
 ### Problema

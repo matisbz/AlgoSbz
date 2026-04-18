@@ -55,6 +55,7 @@ LOG_PATH = Path(__file__).resolve().parent.parent / "data" / "live_trades.log"
 
 POLL_INTERVAL = 30  # seconds between bar checks
 HISTORY_BARS = 500  # bars of history for strategy setup
+MAX_EXEC_RETRIES = 3  # consecutive execution failures before abandoning signal
 
 # Ensure data directory exists before setting up logging
 LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +116,8 @@ class StrategyManager:
         self.bar_data = {}         # (symbol, tf) → DataFrame
         self.last_bar_time = {}    # (symbol, tf) → last processed bar timestamp
         self.pending_signals = {}  # combo → Signal (waiting for next bar)
-        self.last_signal_bar = {}  # combo → timestamp of bar that generated signal
+        self.pending_signal_bar = {}  # combo → bar_time when pending signal was generated
+        self.last_signal_bar = {}  # combo → timestamp of last bar evaluated
         self._setup_done = set()   # combos that have been setup
 
     def load_strategies(self):
@@ -282,6 +284,7 @@ class StrategyManager:
                 if signal.action in (SignalAction.ENTER_LONG, SignalAction.ENTER_SHORT):
                     if not has_pos:
                         self.pending_signals[combo] = signal
+                        self.pending_signal_bar[combo] = bar_time
                         logger.info("PENDING SIGNAL: %s → %s SL=%.5f TP=%s (bar=%s)",
                                     combo, signal.action.name,
                                     signal.stop_loss or 0,
@@ -340,6 +343,7 @@ class StrategyManager:
     def confirm_signal_consumed(self, combo: str):
         """Mark a pending signal as consumed (executed or rejected by risk checks)."""
         self.pending_signals.pop(combo, None)
+        self.pending_signal_bar.pop(combo, None)
 
     def discard_stale_signals(self):
         """
@@ -355,7 +359,7 @@ class StrategyManager:
             if key in self.bar_data:
                 df = self.bar_data[key]
                 if len(df) >= 3:
-                    signal_bar = self.last_signal_bar.get(combo)
+                    signal_bar = self.pending_signal_bar.get(combo)
                     # Signal from bar[i] should execute during bar[i+1].
                     # If current forming bar is bar[i+2] or later, it's stale.
                     # df.index[-1] = forming bar, df.index[-2] = last completed bar
@@ -363,8 +367,10 @@ class StrategyManager:
                     if signal_bar is not None and signal_bar < df.index[-2]:
                         stale.append(combo)
         for combo in stale:
-            logger.warning("STALE signal discarded: %s (missed execution window)", combo)
+            logger.warning("STALE signal discarded: %s (generated bar=%s)",
+                           combo, self.pending_signal_bar.get(combo))
             self.pending_signals.pop(combo, None)
+            self.pending_signal_bar.pop(combo, None)
 
 
 # ─── Live Account (with RiskManager + EquityManager) ────────────
@@ -885,6 +891,7 @@ def main():
                 metadata=sig_data.get("metadata", {}),
             )
             strat_mgr.pending_signals[combo] = restored_signal
+            strat_mgr.pending_signal_bar[combo] = prev_bar_time
             logger.info("Restored pending signal: %s → %s (generated %s)", combo, action.name, gen_time)
 
     # Sync equity for first account
@@ -923,6 +930,7 @@ def main():
     cycle = 0
     last_day = first.state.current_trading_day()
     last_heartbeat = datetime.now()
+    exec_failures = defaultdict(int)  # combo → consecutive failure count
 
     while True:
         cycle += 1
@@ -1205,19 +1213,8 @@ def main():
                                 state=acct.state.state,
                             )
                         else:
-                            # Execution failed — keep signal pending for retry.
-                            # In backtest execution never fails, so consuming the
-                            # signal on a transient error (no tick, disconnect)
-                            # creates divergence: the trade is lost AND the next
-                            # bar may generate a duplicate signal that wouldn't
-                            # exist in backtest (because has_position would be True).
-                            logger.warning("[%s] Execution failed for %s — "
-                                          "signal kept pending for retry",
+                            logger.warning("[%s] Execution failed for %s",
                                           acct_name, order["combo"])
-                            telegram.send(
-                                f"\u26a0\ufe0f <b>EXEC FAIL</b> {acct.state.name}\n"
-                                f"{order['combo']} {order['direction']} — will retry next cycle"
-                            )
 
                     # Sync equity after execution
                     info = conn.get_account_info()
@@ -1225,6 +1222,28 @@ def main():
                         acct.sync_equity(info["equity"])
 
                     conn.disconnect()
+
+            # Circuit breaker: track consecutive failures per combo
+            for combo in executable:
+                if combo in executed_combos or combo in rejected_combos:
+                    exec_failures.pop(combo, None)
+                else:
+                    exec_failures[combo] += 1
+                    if exec_failures[combo] >= MAX_EXEC_RETRIES:
+                        logger.error("CIRCUIT BREAKER: %s — %d consecutive "
+                                    "execution failures, abandoning signal",
+                                    combo, MAX_EXEC_RETRIES)
+                        strat_mgr.confirm_signal_consumed(combo)
+                        telegram.send(
+                            f"\U0001f6a8 <b>CIRCUIT BREAKER</b>\n"
+                            f"{combo} — {MAX_EXEC_RETRIES} consecutive execution "
+                            f"failures. Signal abandoned. Check MT5 account!")
+                        exec_failures.pop(combo, None)
+                    else:
+                        telegram.send(
+                            f"\u26a0\ufe0f <b>EXEC FAIL</b> {combo}\n"
+                            f"Attempt {exec_failures[combo]}/{MAX_EXEC_RETRIES}"
+                            f" — will retry next bar")
 
             # Confirm executed signals as consumed (failed ones stay pending for retry)
             for combo in executed_combos:
