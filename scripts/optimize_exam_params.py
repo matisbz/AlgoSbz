@@ -37,23 +37,9 @@ from scripts.production_sim import precompute_trades, simulate_exam, _size_trade
 
 
 # ═══════════════════════════════════════════════════════════════
-# ALIVE DECK — same as production_sim
+# ALIVE DECK — all 49 deduped combos from FTMO-data massive scan
 # ═══════════════════════════════════════════════════════════════
-ALIVE_DECK = [
-    "VMR_NZDUSD_wideR_H4_ny", "MACross_XAUUSD_trend_H4_ny",
-    "IBB_NZDUSD_trend_H4", "Engulf_EURUSD_trend_H4",
-    "ADXbirth_XTIUSD_slow_ema_H4", "EMArib_EURJPY_tight_H1",
-    "MACross_AUDUSD_megaT_H4", "MACross_XAUUSD_wideR_H4_ny",
-    "PinBar_EURJPY_deep_H4", "StrBrk_GBPJPY_wideR_H4",
-    "VMR_USDCHF_default_H1_ny", "MomDiv_AUDUSD_wideR_H4",
-    "StochRev_AUDUSD_calm_H4", "VMR_USDJPY_wideR_H4_ny",
-    "EMArib_AUDUSD_trend_H4_lon", "MACross_EURUSD_wideR_H4_lon",
-    "RegVMR_NZDUSD_default_H1_ny", "MACDhist_EURJPY_trend_H4",
-    "MACross_USDCHF_trend_H4_ny", "RSIext_EURJPY_wideR_H4",
-    "TPB_XTIUSD_trend_H4_ny", "MACross_USDJPY_wideR_H4_lon",
-    "MACross_USDCHF_megaT_H4", "MACross_NZDUSD_trend_H4_lon",
-    "TPB_NZDUSD_loose_H4_ny",
-]
+ALIVE_DECK = list(ALL_COMBOS.keys())
 
 
 def walk_forward_filter(streams, combo_names, train_end_year=2023, test_years=2):

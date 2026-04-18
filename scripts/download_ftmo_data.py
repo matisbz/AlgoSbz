@@ -46,8 +46,8 @@ POINT_SIZES = {
 
 # MT5 can return max ~100K bars per request, M1 for 3.5 months ≈ ~100K
 # So we chunk by month to be safe.
-START_DATE = datetime(2026, 1, 1, tzinfo=timezone.utc)
-END_DATE = datetime.now(timezone.utc)
+DEFAULT_START = datetime(2026, 1, 1, tzinfo=timezone.utc)
+DEFAULT_END = datetime.now(timezone.utc)
 
 
 def load_credentials():
@@ -118,6 +118,17 @@ def find_existing_csv(symbol: str) -> Path:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start", help="Start date YYYY-MM-DD", default=None)
+    parser.add_argument("--end", help="End date YYYY-MM-DD", default=None)
+    parser.add_argument("--out-suffix", help="Output file suffix (e.g. FTMO_2024)", default=None)
+    args = parser.parse_args()
+
+    start_date = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc) if args.start else DEFAULT_START
+    end_date = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=timezone.utc) if args.end else DEFAULT_END
+    out_suffix = args.out_suffix
+
     login, password, server = load_credentials()
 
     print(f"Connecting to {server} (account {login})...")
@@ -132,7 +143,7 @@ def main():
 
     info = mt5.account_info()
     print(f"Connected: {info.login}@{info.server} (balance: {info.balance})")
-    print(f"Download period: {START_DATE.date()} -> {END_DATE.date()}")
+    print(f"Download period: {start_date.date()} -> {end_date.date()}")
     print()
 
     for internal_sym, mt5_sym in SYMBOL_MAP.items():
@@ -140,7 +151,7 @@ def main():
         print(f"  {internal_sym} (MT5: {mt5_sym})")
         print(f"{'='*60}")
 
-        df = download_symbol(mt5_sym, START_DATE, END_DATE)
+        df = download_symbol(mt5_sym, start_date, end_date)
         if df.empty:
             print(f"  NO DATA for {mt5_sym}")
             continue
@@ -150,32 +161,36 @@ def main():
 
         formatted = format_for_csv(df, internal_sym)
 
-        # Find existing CSV and append
-        csv_path = find_existing_csv(internal_sym)
-
-        if csv_path.exists():
-            existing = pd.read_csv(csv_path)
-            existing_times = set(existing["time"].astype(str))
-
-            # Only append bars that don't already exist
-            new_mask = ~formatted["time"].astype(str).isin(existing_times)
-            new_bars = formatted[new_mask]
-
-            if len(new_bars) > 0:
-                # Re-index from where existing ends
-                start_idx = len(existing)
-                new_bars = new_bars.reset_index(drop=True)
-                new_bars.index = range(start_idx, start_idx + len(new_bars))
-
-                combined = pd.concat([existing, new_bars], ignore_index=True)
-                combined.to_csv(csv_path, index=True)
-                print(f"  Appended {len(new_bars):,} new bars to {csv_path.name}")
-                print(f"  Total CSV size: {len(combined):,} bars")
-            else:
-                print(f"  All bars already exist in {csv_path.name}")
-        else:
+        if out_suffix:
+            # Separate file mode (for cross-validation)
+            csv_path = DATA_DIR / f"{internal_sym}_M1_{out_suffix}.csv"
             formatted.to_csv(csv_path, index=True)
             print(f"  Created {csv_path.name} with {len(formatted):,} bars")
+        else:
+            # Append mode (default — adds to existing CSV)
+            csv_path = find_existing_csv(internal_sym)
+
+            if csv_path.exists():
+                existing = pd.read_csv(csv_path)
+                existing_times = set(existing["time"].astype(str))
+
+                new_mask = ~formatted["time"].astype(str).isin(existing_times)
+                new_bars = formatted[new_mask]
+
+                if len(new_bars) > 0:
+                    start_idx = len(existing)
+                    new_bars = new_bars.reset_index(drop=True)
+                    new_bars.index = range(start_idx, start_idx + len(new_bars))
+
+                    combined = pd.concat([existing, new_bars], ignore_index=True)
+                    combined.to_csv(csv_path, index=True)
+                    print(f"  Appended {len(new_bars):,} new bars to {csv_path.name}")
+                    print(f"  Total CSV size: {len(combined):,} bars")
+                else:
+                    print(f"  All bars already exist in {csv_path.name}")
+            else:
+                formatted.to_csv(csv_path, index=True)
+                print(f"  Created {csv_path.name} with {len(formatted):,} bars")
 
     mt5.shutdown()
     print(f"\n{'='*60}")

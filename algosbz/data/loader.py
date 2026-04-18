@@ -35,6 +35,10 @@ class DataLoader:
             raise FileNotFoundError(
                 f"No CSV found for {symbol} in {self.data_dir} (pattern: {pattern})"
             )
+        # Prefer FTMO_full data (broker-native) over Darwinex/Dukascopy
+        for m in matches:
+            if "FTMO_full" in m.name:
+                return m
         return matches[0]
 
     def _cache_key(self, csv_path: Path) -> str:

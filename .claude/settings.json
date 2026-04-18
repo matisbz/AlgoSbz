@@ -24,7 +24,27 @@
       "Bash(python -X utf8)",
       "Bash(python -X utf8 scripts/optimize_exam_params.py)",
       "Bash(ls scripts/*.py)",
-      "Bash(python -c \"from datetime import datetime; d1=datetime\\(2026,4,12\\); d2=datetime\\(2026,4,13\\); print\\(f'Apr 12 = {d1.strftime\\(\\\\\"%A\\\\\"\\)}'\\); print\\(f'Apr 13 = {d2.strftime\\(\\\\\"%A\\\\\"\\)}'\\)\")"
+      "Bash(python -c \"from datetime import datetime; d1=datetime\\(2026,4,12\\); d2=datetime\\(2026,4,13\\); print\\(f'Apr 12 = {d1.strftime\\(\\\\\"%A\\\\\"\\)}'\\); print\\(f'Apr 13 = {d2.strftime\\(\\\\\"%A\\\\\"\\)}'\\)\")",
+      "Bash(python -X utf8 scripts/massive_scan.py --tf H1)",
+      "Bash(sort -t= -k2 -rn)",
+      "Bash(python -X utf8 -m pytest tests/test_live_parity.py -v)",
+      "Bash(python -c ':*)",
+      "Bash(python -X:*)",
+      "Bash(powershell -Command \"Get-Process -Id 43360 | Select-Object CPU,WorkingSet64\")",
+      "Bash(powershell -Command \"Start-Sleep 10; Get-Process -Id 43360 | Select-Object CPU\")",
+      "Bash(powershell -Command \"Start-Sleep 30; Get-Process -Id 43360 -ErrorAction SilentlyContinue | Select-Object CPU; Get-Content 'C:\\\\Users\\\\mateo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-mateo-Desktop-Proyectos-AlgoSbz\\\\db9a9e5b-27b1-4ab4-9e7f-c2ca0029553e\\\\tasks\\\\bc6ae5cnr.output' | Measure-Object -Line\")",
+      "Bash(taskkill //PID 43360 //F)",
+      "Bash(rm -f \"c:/Users/mateo/Desktop/Proyectos/AlgoSbz/cache/\"*.parquet)",
+      "Bash(ls \"c:/Users/mateo/Desktop/Proyectos/AlgoSbz/cache/\"*.parquet)",
+      "Bash(grep \"ALIVE$\" \"C:\\\\Users\\\\mateo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-mateo-Desktop-Proyectos-AlgoSbz\\\\db9a9e5b-27b1-4ab4-9e7f-c2ca0029553e\\\\tasks\\\\bdzkhfqxj.output\")",
+      "Bash(awk '{print $1, $NF, $\\(NF-1\\), $\\(NF-2\\)}')",
+      "Bash(ls -la /c/Users/mateo/Desktop/Proyectos/AlgoSbz/reports/massive_scan_*)",
+      "Bash(ls -la /c/Users/mateo/Desktop/Proyectos/AlgoSbz/reports/massive_scan*)",
+      "Bash(ls -la /c/Users/mateo/Desktop/Proyectos/AlgoSbz/reports/scan*)",
+      "Bash(ls /c/Users/mateo/Desktop/Proyectos/AlgoSbz/cache/*.parquet)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\mateo\\Desktop\\Proyectos\\AlgoSbz\\cache"
     ]
   }
 }

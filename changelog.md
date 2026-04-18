@@ -1,4 +1,40 @@
-# Changelog
+ya # Changelog
+
+## 2026-04-13 — Recalibración completa con datos FTMO broker-native
+
+### Problema
+Los datos de Dukascopy (EURJPY, NZDUSD, AUDUSD) divergen 6-14 pips de FTMO y tienen spread=0, inflando el funded rate en backtest. Cross-validación mostró: Darwinex 46.7% funded vs FTMO 24.0% para mismos combos en 2024 — 22pp de inflación ficticia.
+
+### Cambios
+- **Datos reemplazados**: Descargados 10 archivos `*_M1_FTMO_full.csv` (2015-2026, ~4M bars cada uno) vía `download_ftmo_full_history.py`. DataLoader prioriza FTMO_full sobre Darwinex/Dukascopy.
+- **Pipeline completo re-ejecutado con FTMO data**:
+  1. `diagnose_combo_health.py` → 23 ALIVE (antes 25 con datos viejos)
+  2. `massive_scan.py` → 40 ROBUST + 24 SPREAD_OK = 64 combos viables
+  3. `deduplicate_pool.py` → 49 combos únicos (15 clones eliminados)
+  4. `optimize_exam_params.py` → Walk-forward filter (32 supervivientes) + sweep 81 configs
+  5. `production_sim.py` → Validación final
+- **Nuevo pool v7_expanded**: 49 combos (16 estrategias, 9 instrumentos). Reemplaza pool anterior basado en datos con spread=0.
+- **Config óptima actualizada**: P1R4%, P2R2.0% (antes P2R1.5%), DC3.5, MI3 (antes MI2), ML3, CD1.
+- **accounts.yaml actualizado**: Nuevo deck de 32 combos (21 ROBUST + 11 SPREAD_OK walk-forward survivors), nueva config exam/funded, USDCAD añadido a instrumentos.
+- **Scripts nuevos**: `download_ftmo_full_history.py`, `crossval_data_sources.py`.
+
+### Resultados
+| Métrica | Antes (Dukascopy) | Ahora (FTMO) |
+|---------|-------------------|--------------|
+| IS funded rate | 50.2% | 40.9% |
+| OOS funded rate | 10.2% | 11.8% |
+| IS avg days | 26d | 26d |
+| Funded survival | 16.6mo | 14.1mo |
+| Monthly net/$5K | EUR 231 | EUR 167 |
+| Termination | 21% | 37% |
+| Deck size | 25 combos | 32 combos |
+
+### Qué soluciona
+- Elimina sesgo de spread=0 de Dukascopy que inflaba PnL un 22pp.
+- Backtest ahora usa exactamente los mismos datos que el broker live (FTMO).
+- Números reales: sistema rentable a escala (10 exams/mo → EUR +2,405/mo net), breakeven en worst case.
+
+---
 
 ## 2026-04-13 — Fix ejecución live: tick None + señal consumida en error
 

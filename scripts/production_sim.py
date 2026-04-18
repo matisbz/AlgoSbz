@@ -38,12 +38,12 @@ from scripts.challenge_decks_v7_expanded import ALL_COMBOS, STRAT_REGISTRY
 # ═══════════════════════════════════════════════════════════════
 
 EXAM_CONFIG = {
-    "risk_per_trade": 0.02,
-    "p2_risk_per_trade": 0.01,
-    "daily_cap": 2.0,
-    "cooldown": 2,
-    "max_instr": 2,
-    "max_losses": 5,
+    "risk_per_trade": 0.04,
+    "p2_risk_per_trade": 0.02,
+    "daily_cap": 3.5,
+    "cooldown": 1,
+    "max_instr": 3,
+    "max_losses": 3,
 }
 
 FUNDED_CONFIG = {
@@ -54,36 +54,43 @@ FUNDED_CONFIG = {
     "max_losses": 3,
 }
 
-# ALIVE deck — 25 combos with PF > 1.0 in 2024-2025 (from diagnose_combo_health.py)
-# Replaced at runtime by config/accounts.yaml if available.
+# ALIVE deck — 32 combos from FTMO-data massive scan + walk-forward filter (2024-2025 PF>=1.0)
+# Updated 2026-04-13 after full recalibration with FTMO broker-native data
 DECK = [
-    # Tier 1: PF>1.0 in 24-25 + >=6 yrs profitable (16 combos)
-    "VMR_NZDUSD_wideR_H4_ny",          # PF24=6.44  6/10yrs
-    "MACross_XAUUSD_trend_H4_ny",      # PF24=3.43  6/10yrs
-    "IBB_NZDUSD_trend_H4",             # PF24=3.29  6/10yrs
-    "Engulf_EURUSD_trend_H4",          # PF24=2.66  6/10yrs
-    "ADXbirth_XTIUSD_slow_ema_H4",     # PF24=1.94  6/10yrs
-    "EMArib_EURJPY_tight_H1",          # PF24=1.59  7/10yrs
-    "MACross_AUDUSD_megaT_H4",         # PF24=1.56  7/10yrs
-    "MACross_XAUUSD_wideR_H4_ny",      # PF24=1.52  8/10yrs
-    "PinBar_EURJPY_deep_H4",           # PF24=1.43  7/10yrs
-    "StrBrk_GBPJPY_wideR_H4",          # PF24=1.40  7/10yrs
-    "VMR_USDCHF_default_H1_ny",        # PF24=1.32  8/10yrs
-    "MomDiv_AUDUSD_wideR_H4",          # PF24=1.31  6/10yrs
-    "StochRev_AUDUSD_calm_H4",         # PF24=1.21  7/10yrs
-    "VMR_USDJPY_wideR_H4_ny",          # PF24=1.17  6/10yrs
-    "EMArib_AUDUSD_trend_H4_lon",      # PF24=1.09  6/10yrs
-    "MACross_EURUSD_wideR_H4_lon",     # PF24=1.02  6/10yrs
-    # Tier 2: PF>1.0 in 24-25 + 4-5 yrs profitable (9 combos)
-    "RegVMR_NZDUSD_default_H1_ny",     # PF24=2.78  5/10yrs
-    "MACDhist_EURJPY_trend_H4",        # PF24=1.68  4/10yrs
-    "MACross_USDCHF_trend_H4_ny",      # PF24=1.52  4/10yrs
-    "RSIext_EURJPY_wideR_H4",          # PF24=1.40  0/10yrs (few trades/yr)
-    "TPB_XTIUSD_trend_H4_ny",          # PF24=1.30  5/10yrs
-    "MACross_USDJPY_wideR_H4_lon",     # PF24=1.09  4/10yrs
-    "MACross_USDCHF_megaT_H4",         # PF24=1.09  3/10yrs
-    "MACross_NZDUSD_trend_H4_lon",     # PF24=4.35  3/10yrs (low freq)
-    "TPB_NZDUSD_loose_H4_ny",          # PF24=1.00  7/10yrs (borderline)
+    # ROBUST tier (PF>1.05, period stable 3/5, spread stress, param sensitivity)
+    "MomDiv_EURJPY_trend_H4",           # PF=2.26
+    "MACross_XAUUSD_trend_H4",          # PF=1.96
+    "MACross_XAUUSD_wideR_H4_ny",       # PF=1.88
+    "SwBrk_EURJPY_slow_H4",             # PF=1.87
+    "MACross_AUDUSD_trend_H4_ny",        # PF=1.81
+    "EMArib_EURJPY_trend_H4",           # PF=1.78
+    "MACross_NZDUSD_wideR_H4_ny",        # PF=1.74
+    "SwBrk_EURJPY_wideR_H4",            # PF=1.64
+    "Engulf_GBPJPY_trend_H4",           # PF=1.59
+    "RegVMR_NZDUSD_default_H4",         # PF=1.59
+    "MACross_EURJPY_wideR_H4_lon",       # PF=1.59
+    "StrBrk_GBPJPY_wideR_H4",           # PF=1.47
+    "SwBrk_AUDUSD_wideR_H4",            # PF=1.42
+    "EMArib_USDJPY_trend_H4",           # PF=1.36
+    "EMArib_EURJPY_tight_H1",           # PF=1.35
+    "Engulf_EURUSD_tight_H4",           # PF=1.33
+    "MACross_USDCHF_megaT_H4",          # PF=1.26
+    "IBB_AUDUSD_multi_H4",              # PF=1.26
+    "StrBrk_GBPJPY_trend_H4",           # PF=1.20
+    "MACross_EURUSD_wideR_H4_lon",       # PF=1.12
+    "VMR_USDCHF_default_H1_lon",        # PF=1.11
+    # SPREAD_OK tier (walk-forward survivors)
+    "MomDiv_EURJPY_wideR_H4",           # PF=1.39
+    "KeltSq_EURJPY_wideR_H4_lon",        # PF=1.26
+    "MACross_EURUSD_trend_H4_lon",       # PF=1.21
+    "ADXbirth_USDCAD_strict_H4",         # PF=1.26
+    "VMR_USDJPY_wideR_H4_ny",           # PF=1.13
+    "MACross_GBPJPY_wideR_H4_ny",        # PF=1.13
+    "KeltSq_XAUUSD_wideR_H4_lon",        # PF=1.09
+    "KeltSq_USDJPY_slow_H4",            # PF=1.07
+    "StochRev_AUDUSD_calm_H4",          # PF=1.06
+    "TPB_USDJPY_trend_H4_lon",          # PF=1.05
+    "MACross_USDJPY_trend_H4_ny",        # PF=1.06
 ]
 
 ACCOUNTS_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "accounts.yaml"

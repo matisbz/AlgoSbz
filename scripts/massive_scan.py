@@ -8,6 +8,7 @@ Usage:
     python -X utf8 scripts/massive_scan.py
 """
 import sys
+import argparse
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -438,13 +439,30 @@ def param_sensitivity(config, instrument_cfg, data, strat_key, preset_params, sy
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--tf", help="Filter presets by timeframe (e.g. H1, H4)")
+    args = parser.parse_args()
+    tf_filter = args.tf  # None means all
+
     config = load_config()
     instruments = load_all_instruments()
     loader = DataLoader()
 
+    # Build filtered preset list
+    filtered_strategies = {}
+    for strat_key, strat_info in STRATEGIES.items():
+        presets = {}
+        for pname, pparams in strat_info["presets"].items():
+            if tf_filter and pparams.get("timeframe", "") != tf_filter:
+                continue
+            presets[pname] = pparams
+        if presets:
+            filtered_strategies[strat_key] = {**strat_info, "presets": presets}
+
     # Count total combos
-    total = sum(len(s["presets"]) for s in STRATEGIES.values()) * len(INSTRUMENTS)
-    print(f"MASSIVE SCAN: {total} combos ({len(STRATEGIES)} strats × {len(INSTRUMENTS)} instruments × presets)")
+    total = sum(len(s["presets"]) for s in filtered_strategies.values()) * len(INSTRUMENTS)
+    tf_label = f" [tf={tf_filter}]" if tf_filter else ""
+    print(f"MASSIVE SCAN{tf_label}: {total} combos ({len(filtered_strategies)} strats × {len(INSTRUMENTS)} instruments × presets)")
     print(f"Pipeline: PF>1.05 → Periods≥3/5 → Spread+50%>1.0 → Sensitivity±20%>1.0\n")
 
     # Load data
@@ -481,7 +499,7 @@ def main():
     candidates = []
     done = 0
 
-    for strat_key, strat_info in STRATEGIES.items():
+    for strat_key, strat_info in filtered_strategies.items():
         for preset_name, preset_params in strat_info["presets"].items():
             for sym in INSTRUMENTS:
                 done += 1
